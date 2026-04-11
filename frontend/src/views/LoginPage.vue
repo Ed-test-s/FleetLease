@@ -36,6 +36,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { formatApiError } from '@/utils/apiError'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -53,7 +54,7 @@ async function handleLogin() {
     const redirect = route.query.redirect || '/'
     router.push(redirect)
   } catch (e) {
-    error.value = e.response?.data?.detail || 'Ошибка авторизации'
+    error.value = formatApiError(e, 'Ошибка авторизации')
   } finally {
     loading.value = false
   }

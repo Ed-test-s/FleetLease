@@ -6,7 +6,6 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import (
-    BankAccount,
     Company,
     Entrepreneur,
     Individual,
@@ -68,15 +67,17 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Авторизация по логину, номеру телефона или email."""
+    identifier = data.identifier.strip()
+    contact_user_ids = select(UserContact.user_id).where(UserContact.value == identifier)
     result = await db.execute(
         select(User)
-        .outerjoin(UserContact)
         .where(
             or_(
-                User.login == data.identifier,
-                UserContact.value == data.identifier,
+                User.login == identifier,
+                User.id.in_(contact_user_ids),
             )
         )
+        .limit(1)
     )
     user = result.scalar_one_or_none()
 

@@ -185,6 +185,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { formatApiError } from '@/utils/apiError'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -273,7 +274,10 @@ async function handleRegister() {
     await auth.login(form.value.login, form.value.password)
     router.push('/')
   } catch (e) {
-    error.value = e.response?.data?.detail || 'Ошибка регистрации. Проверьте правильность введённых данных.'
+    error.value = formatApiError(
+      e,
+      'Ошибка регистрации. Проверьте правильность введённых данных.'
+    )
   } finally {
     loading.value = false
   }
