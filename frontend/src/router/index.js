@@ -1,0 +1,140 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const routes = [
+  {
+    path: '/',
+    name: 'catalog',
+    component: () => import('@/views/CatalogPage.vue'),
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginPage.vue'),
+    meta: { guest: true },
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/RegisterPage.vue'),
+    meta: { guest: true },
+  },
+  {
+    path: '/vehicles/:id',
+    name: 'vehicle-detail',
+    component: () => import('@/views/VehicleDetailPage.vue'),
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('@/views/ProfilePage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/users/:id',
+    name: 'user-profile',
+    component: () => import('@/views/UserProfilePage.vue'),
+  },
+  {
+    path: '/suppliers',
+    name: 'suppliers',
+    component: () => import('@/views/SuppliersPage.vue'),
+  },
+  {
+    path: '/lessors',
+    name: 'lessors',
+    component: () => import('@/views/LessorsPage.vue'),
+  },
+  {
+    path: '/my-vehicles',
+    name: 'my-vehicles',
+    component: () => import('@/views/MyVehiclesPage.vue'),
+    meta: { auth: true, roles: ['supplier'] },
+  },
+  {
+    path: '/my-vehicles/new',
+    name: 'vehicle-create',
+    component: () => import('@/views/VehicleFormPage.vue'),
+    meta: { auth: true, roles: ['supplier'] },
+  },
+  {
+    path: '/my-vehicles/:id/edit',
+    name: 'vehicle-edit',
+    component: () => import('@/views/VehicleFormPage.vue'),
+    meta: { auth: true, roles: ['supplier'] },
+  },
+  {
+    path: '/requests',
+    name: 'requests',
+    component: () => import('@/views/RequestsPage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/contracts',
+    name: 'contracts',
+    component: () => import('@/views/ContractsPage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/contracts/:id',
+    name: 'contract-detail',
+    component: () => import('@/views/ContractDetailPage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/chats',
+    name: 'chats',
+    component: () => import('@/views/ChatsPage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/chats/:id',
+    name: 'chat-detail',
+    component: () => import('@/views/ChatDetailPage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/views/NotificationsPage.vue'),
+    meta: { auth: true },
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/AdminPage.vue'),
+    meta: { auth: true, roles: ['admin'] },
+  },
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+  scrollBehavior: () => ({ top: 0 }),
+})
+
+router.beforeEach(async (to, from, next) => {
+  const auth = useAuthStore()
+
+  if (auth.isAuthenticated && !auth.user) {
+    await auth.fetchUser()
+  }
+
+  if (to.meta.auth && !auth.isAuthenticated) {
+    return next({ name: 'login', query: { redirect: to.fullPath } })
+  }
+
+  if (to.meta.guest && auth.isAuthenticated) {
+    return next({ name: 'catalog' })
+  }
+
+  if (to.meta.roles && auth.user) {
+    if (!to.meta.roles.includes(auth.user.role)) {
+      return next({ name: 'catalog' })
+    }
+  }
+
+  next()
+})
+
+export default router
