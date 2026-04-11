@@ -24,6 +24,8 @@ class VehicleCreate(BaseModel):
     mileage: int | None = None
     vin: str | None = Field(None, max_length=17, min_length=17)
     colour: str | None = None
+    region_id: int | None = None
+    city_id: int | None = None
     location: str | None = None
     fuel_type: str | None = None
     engine_capacity: float | None = None
@@ -60,6 +62,8 @@ class VehicleOut(BaseModel):
     mileage: int | None = None
     vin: str | None = None
     colour: str | None = None
+    region_id: int | None = None
+    city_id: int | None = None
     location: str | None = None
     fuel_type: str | None = None
     engine_capacity: float | None = None
@@ -87,8 +91,15 @@ class VehicleListOut(BaseModel):
     count: int
     release_year: int | None = None
     mileage: int | None = None
+    colour: str | None = None
+    region_id: int | None = None
+    city_id: int | None = None
     location: str | None = None
     fuel_type: str | None = None
+    engine_capacity: float | None = None
+    hp: int | None = None
+    transmission: str | None = None
+    drive_type: str | None = None
     is_visible: bool
     created_at: datetime
     images: list[VehicleImageOut] = []

@@ -39,11 +39,13 @@ class Vehicle(Base):
     mileage: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vin: Mapped[str | None] = mapped_column(String(17), nullable=True)
     colour: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    region_id: Mapped[int | None] = mapped_column(ForeignKey("regions.id"), nullable=True)
+    city_id: Mapped[int | None] = mapped_column(ForeignKey("cities.id"), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fuel_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     engine_capacity: Mapped[float | None] = mapped_column(Float, nullable=True)
     hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    transmission: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    transmission: Mapped[str | None] = mapped_column(String(50), nullable=True)
     drive_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     extras: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -54,6 +56,8 @@ class Vehicle(Base):
         back_populates="vehicle", cascade="all, delete-orphan", order_by="VehicleImage.id"
     )
     supplier: Mapped["User"] = relationship("User", foreign_keys=[supplier_id])
+    region: Mapped["Region | None"] = relationship("Region")
+    city: Mapped["City | None"] = relationship("City")
 
 
 class VehicleImage(Base):

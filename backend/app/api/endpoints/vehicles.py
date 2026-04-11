@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_optional_user, require_role
 from app.core.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserType
 from app.models.vehicle import Vehicle, VehicleCondition, VehicleImage
 from app.schemas.vehicle import VehicleCreate, VehicleListOut, VehicleOut, VehicleUpdate
 from app.services.storage import storage_service
@@ -29,11 +29,17 @@ async def list_vehicles(
     fuel_type: str | None = None,
     drive_type: str | None = None,
     transmission: str | None = None,
-    location: str | None = None,
     colour: str | None = None,
+    region_id: int | None = None,
+    city_id: int | None = None,
     in_stock: bool | None = None,
     supplier_id: int | None = None,
-    sort_by: str = Query("newest", regex="^(newest|oldest|price_asc|price_desc|mileage_asc|year_desc|year_asc)$"),
+    supplier_type: str | None = Query(None, description="Comma-separated: individual,ie,company"),
+    engine_capacity_min: float | None = None,
+    engine_capacity_max: float | None = None,
+    hp_min: int | None = None,
+    hp_max: int | None = None,
+    sort_by: str = Query("newest", pattern="^(newest|oldest|price_asc|price_desc|mileage_asc|year_desc|year_asc)$"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -45,9 +51,9 @@ async def list_vehicles(
         pattern = f"%{search}%"
         q = q.where(Vehicle.name.ilike(pattern) | Vehicle.brand.ilike(pattern) | Vehicle.model.ilike(pattern))
     if brand:
-        q = q.where(Vehicle.brand.ilike(f"%{brand}%"))
+        q = q.where(Vehicle.brand == brand)
     if model:
-        q = q.where(Vehicle.model.ilike(f"%{model}%"))
+        q = q.where(Vehicle.model == model)
     if vehicle_type:
         q = q.where(Vehicle.vehicle_type == vehicle_type)
     if condition:
@@ -69,15 +75,30 @@ async def list_vehicles(
     if drive_type:
         q = q.where(Vehicle.drive_type == drive_type)
     if transmission:
-        q = q.where(Vehicle.transmission.ilike(f"%{transmission}%"))
-    if location:
-        q = q.where(Vehicle.location.ilike(f"%{location}%"))
+        q = q.where(Vehicle.transmission == transmission)
     if colour:
-        q = q.where(Vehicle.colour.ilike(f"%{colour}%"))
+        q = q.where(Vehicle.colour == colour)
+    if region_id is not None:
+        q = q.where(Vehicle.region_id == region_id)
+    if city_id is not None:
+        q = q.where(Vehicle.city_id == city_id)
     if in_stock:
         q = q.where(Vehicle.count > 0)
     if supplier_id:
         q = q.where(Vehicle.supplier_id == supplier_id)
+    if supplier_type:
+        types = [t.strip() for t in supplier_type.split(",") if t.strip()]
+        valid = [UserType(t) for t in types if t in UserType.__members__.values()]
+        if valid:
+            q = q.join(User, Vehicle.supplier_id == User.id).where(User.user_type.in_(valid))
+    if engine_capacity_min is not None:
+        q = q.where(Vehicle.engine_capacity >= engine_capacity_min)
+    if engine_capacity_max is not None:
+        q = q.where(Vehicle.engine_capacity <= engine_capacity_max)
+    if hp_min is not None:
+        q = q.where(Vehicle.hp >= hp_min)
+    if hp_max is not None:
+        q = q.where(Vehicle.hp <= hp_max)
 
     sort_map = {
         "newest": Vehicle.created_at.desc(),

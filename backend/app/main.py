@@ -5,16 +5,22 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, async_session
 
-# Ensure all models are imported so Base.metadata is populated
 from app.models import user, vehicle, leasing, chat, notification, review  # noqa: F401
+from app.models import reference  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    from app.services.seed import seed_admin, seed_reference_data
+    async with async_session() as db:
+        await seed_reference_data(db)
+        await seed_admin(db)
+
     yield
 
 

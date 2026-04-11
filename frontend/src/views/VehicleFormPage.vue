@@ -8,14 +8,28 @@
           <label class="label">Наименование</label>
           <input v-model="form.name" class="input-field" required placeholder="MAN TGS 33.430 6x4 BB-WW" />
         </div>
+
         <div>
           <label class="label">Марка</label>
-          <input v-model="form.brand" class="input-field" required placeholder="MAN" />
+          <SearchableSelect v-model="form.brand" :options="brandOptions" placeholder="Выберите марку"
+                            :allow-empty="false" @update:model-value="onBrandChange" />
+          <div v-if="!brandExists && form.brand" class="mt-1">
+            <button type="button" @click="addNewBrand" class="text-xs text-primary-500 hover:underline">
+              + Добавить марку «{{ newBrandInput }}» в базу
+            </button>
+          </div>
         </div>
+
         <div>
           <label class="label">Модель</label>
-          <input v-model="form.model" class="input-field" required placeholder="TGS 33.430" />
+          <SearchableSelect v-model="form.model" :options="modelOptions" placeholder="Выберите модель"
+                            :allow-empty="false" />
+          <div class="mt-1 flex gap-2 items-center">
+            <input v-model="newModelInput" class="input-field py-1 text-xs flex-1" placeholder="Новая модель" />
+            <button type="button" @click="addNewModel" class="btn-secondary btn-sm text-xs" :disabled="!newModelInput">+</button>
+          </div>
         </div>
+
         <div>
           <label class="label">Раздел / Тип ТС</label>
           <select v-model="form.vehicle_type" class="input-field" required>
@@ -61,14 +75,21 @@
           <label class="label">VIN (17 символов)</label>
           <input v-model="form.vin" class="input-field" maxlength="17" />
         </div>
+
         <div>
           <label class="label">Цвет кузова</label>
-          <input v-model="form.colour" class="input-field" />
+          <SearchableSelect v-model="form.colour" :options="colourOptions" placeholder="Выберите цвет" />
+        </div>
+
+        <div>
+          <label class="label">Область</label>
+          <SearchableSelect v-model="form.region_id" :options="regionOptions" placeholder="Область" @update:model-value="onRegionChange" />
         </div>
         <div>
-          <label class="label">Местоположение</label>
-          <input v-model="form.location" class="input-field" placeholder="г. Минск" />
+          <label class="label">Город</label>
+          <SearchableSelect v-model="form.city_id" :options="cityOptions" placeholder="Город" />
         </div>
+
         <div>
           <label class="label">Тип двигателя</label>
           <select v-model="form.fuel_type" class="input-field">
@@ -89,7 +110,12 @@
         </div>
         <div>
           <label class="label">Трансмиссия</label>
-          <input v-model="form.transmission" class="input-field" placeholder="6МКПП" />
+          <select v-model="form.transmission" class="input-field">
+            <option value="">—</option>
+            <option>Механическая</option>
+            <option>Автоматическая</option>
+            <option>Роботизированная</option>
+          </select>
         </div>
         <div>
           <label class="label">Тип привода</label>
@@ -123,7 +149,7 @@
         <div class="flex gap-2 flex-wrap mb-3">
           <div v-for="img in currentImages" :key="img.id" class="relative w-24 h-24 rounded-lg overflow-hidden border border-surface-200">
             <img :src="img.image_url" class="w-full h-full object-cover" />
-            <button @click="removeImage(img.id)" class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">&times;</button>
+            <button type="button" @click="removeImage(img.id)" class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">&times;</button>
           </div>
         </div>
         <input type="file" accept="image/*" @change="uploadImage" class="text-sm" />
@@ -143,7 +169,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { vehiclesApi } from '@/api/vehicles'
+import { referencesApi } from '@/api/references'
 import { useNotificationsStore } from '@/stores/notifications'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -153,18 +181,83 @@ const isEdit = computed(() => !!route.params.id)
 const submitting = ref(false)
 const currentImages = ref([])
 
+const brands = ref([])
+const colours = ref([])
+const regions = ref([])
+const newModelInput = ref('')
+const newBrandInput = ref('')
+
 const form = ref({
-  name: '', brand: '', model: '', vehicle_type: '', condition: 'new',
+  name: '', brand: null, model: null, vehicle_type: '', condition: 'new',
   price: null, count: 1, product_code: '', release_year: null,
-  mileage: null, vin: '', colour: '', location: '', fuel_type: '',
-  engine_capacity: null, hp: null, transmission: '', drive_type: '',
-  extras: '', description: '', is_visible: true,
+  mileage: null, vin: '', colour: null, region_id: null, city_id: null,
+  location: '', fuel_type: '', engine_capacity: null, hp: null,
+  transmission: '', drive_type: '', extras: '', description: '', is_visible: true,
 })
 
+const brandOptions = computed(() => brands.value.map(b => ({ value: b.name, label: b.name })))
+const brandExists = computed(() => brands.value.some(b => b.name === form.value.brand))
+
+const modelOptions = computed(() => {
+  const selected = brands.value.find(b => b.name === form.value.brand)
+  if (!selected) return []
+  return selected.models.map(m => ({ value: m.name, label: m.name }))
+})
+
+const colourOptions = computed(() => colours.value.map(c => ({ value: c.name, label: c.name })))
+const regionOptions = computed(() => regions.value.map(r => ({ value: r.id, label: r.name })))
+const cityOptions = computed(() => {
+  const sel = regions.value.find(r => r.id === form.value.region_id)
+  if (!sel) return []
+  return sel.cities.map(c => ({ value: c.id, label: c.name }))
+})
+
+function onBrandChange() { form.value.model = null }
+function onRegionChange() { form.value.city_id = null }
+
+async function addNewBrand() {
+  if (!newBrandInput.value) return
+  try {
+    await referencesApi.createBrand(newBrandInput.value)
+    const { data } = await referencesApi.getBrands()
+    brands.value = data
+    form.value.brand = newBrandInput.value
+    newBrandInput.value = ''
+    notifStore.showToast('Марка добавлена', 'success')
+  } catch (e) {
+    notifStore.showToast(e.response?.data?.detail || 'Ошибка', 'error')
+  }
+}
+
+async function addNewModel() {
+  const brand = brands.value.find(b => b.name === form.value.brand)
+  if (!brand || !newModelInput.value) return
+  try {
+    await referencesApi.createModel(brand.id, newModelInput.value)
+    const { data } = await referencesApi.getBrands()
+    brands.value = data
+    form.value.model = newModelInput.value
+    newModelInput.value = ''
+    notifStore.showToast('Модель добавлена', 'success')
+  } catch (e) {
+    notifStore.showToast(e.response?.data?.detail || 'Ошибка', 'error')
+  }
+}
+
 onMounted(async () => {
+  const [bRes, cRes, rRes] = await Promise.all([
+    referencesApi.getBrands(),
+    referencesApi.getColours(),
+    referencesApi.getRegions(),
+  ])
+  brands.value = bRes.data
+  colours.value = cRes.data
+  regions.value = rRes.data
+
   if (isEdit.value) {
     const { data } = await vehiclesApi.get(route.params.id)
-    Object.keys(form.value).forEach(k => { if (data[k] !== undefined) form.value[k] = data[k] })
+    const keys = Object.keys(form.value)
+    keys.forEach(k => { if (data[k] !== undefined) form.value[k] = data[k] })
     currentImages.value = data.images || []
   }
 })
@@ -172,11 +265,12 @@ onMounted(async () => {
 async function handleSubmit() {
   submitting.value = true
   try {
+    const payload = { ...form.value }
     if (isEdit.value) {
-      await vehiclesApi.update(route.params.id, form.value)
+      await vehiclesApi.update(route.params.id, payload)
       notifStore.showToast('Объявление обновлено', 'success')
     } else {
-      const { data } = await vehiclesApi.create(form.value)
+      const { data } = await vehiclesApi.create(payload)
       notifStore.showToast('Объявление создано', 'success')
       router.push(`/my-vehicles/${data.id}/edit`)
       return

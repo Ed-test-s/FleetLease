@@ -7,15 +7,12 @@
         <p class="text-sm text-gray-500 mt-1">Грузовые автомобили, тягачи, спецтехника</p>
       </div>
       <div class="flex items-center gap-3">
-        <!-- Search -->
         <div class="relative">
           <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <input v-model="filters.search" @input="debouncedFetch" type="text" class="input-field pl-10 w-64"
-                 placeholder="Поиск по названию..." />
+          <input v-model="filters.search" @input="debouncedFetch" type="text" class="input-field pl-10 w-64" placeholder="Поиск по названию..." />
         </div>
-        <!-- Sort -->
         <select v-model="filters.sort_by" @change="fetchVehicles" class="input-field w-auto">
           <option value="newest">Сначала новые</option>
           <option value="oldest">Сначала старые</option>
@@ -31,7 +28,7 @@
     <div class="flex gap-6">
       <!-- Sidebar Filters -->
       <aside class="hidden lg:block w-72 flex-shrink-0">
-        <div class="card p-5 sticky top-20 space-y-5">
+        <div class="card p-5 sticky top-20 space-y-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
           <h3 class="text-sm font-semibold text-gray-800">Фильтры</h3>
 
           <div>
@@ -44,18 +41,38 @@
 
           <div>
             <label class="label">Марка</label>
-            <input v-model="filters.brand" @input="debouncedFetch" type="text" class="input-field" placeholder="Например, MAN" />
+            <SearchableSelect v-model="filters.brand" :options="brandOptions"
+                              placeholder="Все марки" search-placeholder="Введите марку..." @update:model-value="onBrandChange" />
           </div>
 
           <div>
             <label class="label">Модель</label>
-            <input v-model="filters.model" @input="debouncedFetch" type="text" class="input-field" placeholder="Модель" />
+            <SearchableSelect v-model="filters.model" :options="modelOptions"
+                              placeholder="Все модели" search-placeholder="Введите модель..." @update:model-value="fetchVehicles" />
+          </div>
+
+          <div>
+            <label class="label">От кого предложения</label>
+            <div class="space-y-1.5">
+              <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input v-model="supplierTypes" value="individual" type="checkbox" @change="fetchVehicles"
+                       class="rounded border-gray-300 text-primary-500 focus:ring-primary-500" /> Физическое лицо
+              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input v-model="supplierTypes" value="ie" type="checkbox" @change="fetchVehicles"
+                       class="rounded border-gray-300 text-primary-500 focus:ring-primary-500" /> ИП
+              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input v-model="supplierTypes" value="company" type="checkbox" @change="fetchVehicles"
+                       class="rounded border-gray-300 text-primary-500 focus:ring-primary-500" /> Юридическое лицо
+              </label>
+            </div>
           </div>
 
           <div>
             <label class="label">Состояние</label>
             <select v-model="filters.condition" @change="fetchVehicles" class="input-field">
-              <option value="">Любое</option>
+              <option value="">Любой</option>
               <option value="new">Новый</option>
               <option value="used">С пробегом</option>
             </select>
@@ -95,6 +112,30 @@
           </div>
 
           <div>
+            <label class="label">Цвет кузова</label>
+            <SearchableSelect v-model="filters.colour" :options="colourOptions"
+                              placeholder="Все цвета" search-placeholder="Введите цвет..." @update:model-value="fetchVehicles" />
+          </div>
+
+          <div>
+            <label class="label">Область</label>
+            <SearchableSelect v-model="filters.region_id" :options="regionOptions"
+                              placeholder="Все области" @update:model-value="onRegionChange" />
+          </div>
+
+          <div>
+            <label class="label">Город</label>
+            <SearchableSelect v-model="filters.city_id" :options="cityOptions"
+                              placeholder="Все города" @update:model-value="fetchVehicles" />
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input v-model="filters.in_stock" @change="fetchVehicles" type="checkbox" id="in_stock"
+                   class="rounded border-gray-300 text-primary-500 focus:ring-primary-500" />
+            <label for="in_stock" class="text-sm text-gray-700">В наличии</label>
+          </div>
+
+          <div>
             <label class="label">Тип двигателя</label>
             <select v-model="filters.fuel_type" @change="fetchVehicles" class="input-field">
               <option value="">Все</option>
@@ -102,6 +143,28 @@
               <option>Бензиновый</option>
               <option>Электро</option>
               <option>Гибрид</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="label">Объём двигателя, л</label>
+            <input v-model.number="filters.engine_capacity_min" @input="debouncedFetch" type="number" step="0.1"
+                   class="input-field" placeholder="От" />
+          </div>
+
+          <div>
+            <label class="label">Мощность, л.с.</label>
+            <input v-model.number="filters.hp_min" @input="debouncedFetch" type="number"
+                   class="input-field" placeholder="От" />
+          </div>
+
+          <div>
+            <label class="label">Трансмиссия</label>
+            <select v-model="filters.transmission" @change="fetchVehicles" class="input-field">
+              <option value="">Все</option>
+              <option value="Механическая">Механическая</option>
+              <option value="Автоматическая">Автоматическая</option>
+              <option value="Роботизированная">Роботизированная</option>
             </select>
           </div>
 
@@ -114,21 +177,6 @@
               <option>Постоянный полный</option>
               <option>Подключаемый полный</option>
             </select>
-          </div>
-
-          <div>
-            <label class="label">Цвет</label>
-            <input v-model="filters.colour" @input="debouncedFetch" type="text" class="input-field" placeholder="Цвет кузова" />
-          </div>
-
-          <div>
-            <label class="label">Город / Местоположение</label>
-            <input v-model="filters.location" @input="debouncedFetch" type="text" class="input-field" placeholder="Минск" />
-          </div>
-
-          <div class="flex items-center gap-2">
-            <input v-model="filters.in_stock" @change="fetchVehicles" type="checkbox" id="in_stock" class="rounded border-gray-300 text-primary-500 focus:ring-primary-500" />
-            <label for="in_stock" class="text-sm text-gray-700">В наличии</label>
           </div>
 
           <button @click="resetFilters" class="btn-secondary w-full btn-sm">Сбросить фильтры</button>
@@ -174,8 +222,7 @@
           </router-link>
         </div>
 
-        <!-- Load more -->
-        <div v-if="vehicles.length >= limit" class="text-center mt-6">
+        <div v-if="vehicles.length >= pageLimit" class="text-center mt-6">
           <button @click="loadMore" class="btn-secondary">Загрузить ещё</button>
         </div>
       </div>
@@ -184,41 +231,101 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { vehiclesApi } from '@/api/vehicles'
+import { referencesApi } from '@/api/references'
 import { formatPrice, formatMileage } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const vehicles = ref([])
 const loading = ref(true)
-const limit = 20
+const pageLimit = 20
 let skip = 0
 let debounceTimer = null
+
+const brands = ref([])
+const colours = ref([])
+const regions = ref([])
+const supplierTypes = ref([])
 
 const vehicleTypes = ['Грузовой транспорт', 'Тягач', 'Самосвал', 'Фургон', 'Прицеп', 'Полуприцеп', 'Спецтехника', 'Коммерческий транспорт']
 
 const filters = ref({
-  search: '', brand: '', model: '', vehicle_type: '', condition: '',
+  search: '', brand: null, model: null, vehicle_type: '', condition: '',
   price_min: null, price_max: null, year_min: null, year_max: null,
   mileage_min: null, mileage_max: null, fuel_type: '', drive_type: '',
-  colour: '', location: '', in_stock: false, sort_by: 'newest',
+  colour: null, region_id: null, city_id: null, in_stock: false,
+  sort_by: 'newest', transmission: '',
+  engine_capacity_min: null, hp_min: null,
 })
 
-onMounted(() => fetchVehicles())
+const brandOptions = computed(() =>
+  brands.value.map(b => ({ value: b.name, label: b.name }))
+)
+
+const modelOptions = computed(() => {
+  const selected = brands.value.find(b => b.name === filters.value.brand)
+  if (!selected) {
+    const all = brands.value.flatMap(b => b.models.map(m => ({ value: m.name, label: m.name })))
+    const unique = [...new Map(all.map(i => [i.value, i])).values()]
+    return unique.sort((a, b) => a.label.localeCompare(b.label))
+  }
+  return selected.models.map(m => ({ value: m.name, label: m.name }))
+})
+
+const colourOptions = computed(() =>
+  colours.value.map(c => ({ value: c.name, label: c.name }))
+)
+
+const regionOptions = computed(() =>
+  regions.value.map(r => ({ value: r.id, label: r.name }))
+)
+
+const cityOptions = computed(() => {
+  const sel = regions.value.find(r => r.id === filters.value.region_id)
+  if (!sel) {
+    return regions.value.flatMap(r => r.cities.map(c => ({ value: c.id, label: c.name })))
+  }
+  return sel.cities.map(c => ({ value: c.id, label: c.name }))
+})
+
+onMounted(async () => {
+  const [bRes, cRes, rRes] = await Promise.all([
+    referencesApi.getBrands(),
+    referencesApi.getColours(),
+    referencesApi.getRegions(),
+  ])
+  brands.value = bRes.data
+  colours.value = cRes.data
+  regions.value = rRes.data
+  fetchVehicles()
+})
 
 function debouncedFetch() {
   clearTimeout(debounceTimer)
   debounceTimer = setTimeout(fetchVehicles, 400)
 }
 
+function onBrandChange() {
+  filters.value.model = null
+  fetchVehicles()
+}
+
+function onRegionChange() {
+  filters.value.city_id = null
+  fetchVehicles()
+}
+
 async function fetchVehicles() {
   loading.value = true
   skip = 0
   try {
-    const params = { skip: 0, limit }
+    const params = { skip: 0, limit: pageLimit }
     for (const [k, v] of Object.entries(filters.value)) {
       if (v !== '' && v !== null && v !== false) params[k] = v
     }
+    if (supplierTypes.value.length) params.supplier_type = supplierTypes.value.join(',')
     const { data } = await vehiclesApi.list(params)
     vehicles.value = data
   } finally {
@@ -227,22 +334,26 @@ async function fetchVehicles() {
 }
 
 async function loadMore() {
-  skip += limit
-  const params = { skip, limit }
+  skip += pageLimit
+  const params = { skip, limit: pageLimit }
   for (const [k, v] of Object.entries(filters.value)) {
     if (v !== '' && v !== null && v !== false) params[k] = v
   }
+  if (supplierTypes.value.length) params.supplier_type = supplierTypes.value.join(',')
   const { data } = await vehiclesApi.list(params)
   vehicles.value.push(...data)
 }
 
 function resetFilters() {
   filters.value = {
-    search: '', brand: '', model: '', vehicle_type: '', condition: '',
+    search: '', brand: null, model: null, vehicle_type: '', condition: '',
     price_min: null, price_max: null, year_min: null, year_max: null,
     mileage_min: null, mileage_max: null, fuel_type: '', drive_type: '',
-    colour: '', location: '', in_stock: false, sort_by: 'newest',
+    colour: null, region_id: null, city_id: null, in_stock: false,
+    sort_by: 'newest', transmission: '',
+    engine_capacity_min: null, hp_min: null,
   }
+  supplierTypes.value = []
   fetchVehicles()
 }
 </script>
