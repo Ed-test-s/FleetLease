@@ -30,6 +30,9 @@ class LeaseRequestOut(BaseModel):
     comment: str | None = None
     status: RequestStatus
     created_at: datetime
+    vehicle_name: str | None = None
+    client_label: str | None = None
+    lease_company_label: str | None = None
     model_config = {"from_attributes": True}
 
 

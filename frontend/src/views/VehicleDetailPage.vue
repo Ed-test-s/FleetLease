@@ -137,19 +137,40 @@
           </div>
           <div class="flex-1 overflow-y-auto p-4 space-y-3">
             <LoadingSpinner v-if="lessorsLoading" />
-            <div v-for="l in filteredLessors" :key="l.id" class="flex items-center justify-between p-4 rounded-lg border border-surface-200 hover:border-primary-300 transition-colors">
-              <div>
+            <div
+              v-for="l in filteredLessors"
+              :key="l.id"
+              :class="[
+                'flex items-center justify-between p-4 rounded-lg border transition-colors',
+                lessorEligible(l)
+                  ? 'border-surface-200 hover:border-primary-300'
+                  : 'border-gray-100 bg-gray-50 opacity-70 cursor-not-allowed',
+              ]"
+            >
+              <div class="min-w-0 pr-2">
                 <p class="font-medium text-gray-900">
                   {{ l.company?.legal_form }} «{{ l.company?.company_name }}»
                 </p>
-                <div v-if="l.lease_terms" class="text-xs text-gray-500 mt-1 space-x-3">
+                <div v-if="l.lease_terms" class="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  <span>Стоимость техники: {{ formatPrice(l.lease_terms.min_asset_price) }} — {{ formatPrice(l.lease_terms.max_asset_price) }}</span>
                   <span>Срок: {{ l.lease_terms.min_term_months }}–{{ l.lease_terms.max_term_months }} мес.</span>
                   <span>Аванс: {{ l.lease_terms.min_prepayment_pct }}–{{ l.lease_terms.max_prepayment_pct }}%</span>
                   <span>Ставка: {{ l.lease_terms.interest_rate }}%</span>
                 </div>
+                <p v-else class="text-xs text-amber-700 mt-1">Условия не указаны</p>
+                <p v-if="l.lease_terms && !lessorEligible(l)" class="text-xs text-red-600 mt-1">
+                  Стоимость объявления вне диапазона этой компании
+                </p>
                 <StarRating v-if="l.rating" :rating="l.rating" class="mt-1" />
               </div>
-              <button @click="selectLessor(l)" class="btn-primary btn-sm flex-shrink-0">Оставить заявку</button>
+              <button
+                type="button"
+                :disabled="!lessorEligible(l)"
+                class="btn-primary btn-sm flex-shrink-0 disabled:opacity-40 disabled:pointer-events-none"
+                @click="selectLessor(l)"
+              >
+                Оставить заявку
+              </button>
             </div>
             <p v-if="!lessorsLoading && filteredLessors.length === 0" class="text-center text-gray-500 py-8">Лизингодатели не найдены</p>
           </div>
@@ -170,11 +191,32 @@
             </div>
             <div>
               <label class="label">Срок лизинга (месяцев)</label>
-              <input v-model.number="requestForm.lease_term" type="number" class="input-field" :min="selectedLessor?.lease_terms?.min_term_months || 6" :max="selectedLessor?.lease_terms?.max_term_months || 84" required />
+              <input
+                v-model.number="requestForm.lease_term"
+                type="number"
+                class="input-field"
+                :min="requestTermMin"
+                :max="requestTermMax"
+                required
+              />
+              <p v-if="selectedLessor?.lease_terms" class="text-xs text-gray-400 mt-1">
+                Допустимо: {{ requestTermMin }}–{{ requestTermMax }} мес.
+              </p>
             </div>
             <div>
               <label class="label">Первоначальный взнос (BYN)</label>
-              <input v-model.number="requestForm.prepayment" type="number" class="input-field" step="0.01" required />
+              <input
+                v-model.number="requestForm.prepayment"
+                type="number"
+                class="input-field"
+                step="0.01"
+                :min="requestPrepaymentMin"
+                :max="requestPrepaymentMax"
+                required
+              />
+              <p v-if="selectedLessor?.lease_terms && vehicle" class="text-xs text-gray-400 mt-1">
+                Допустимо: {{ formatPrice(requestPrepaymentMin) }} — {{ formatPrice(requestPrepaymentMax) }}
+              </p>
             </div>
             <div>
               <label class="label">Комментарий</label>
@@ -237,6 +279,51 @@ const filteredLessors = computed(() => {
   )
 })
 
+const requestTermMin = computed(() => selectedLessor.value?.lease_terms?.min_term_months ?? 6)
+const requestTermMax = computed(() => selectedLessor.value?.lease_terms?.max_term_months ?? 84)
+const requestPrepaymentMin = computed(() => {
+  const lt = selectedLessor.value?.lease_terms
+  const price = vehicle.value?.price
+  if (!lt || price == null) return 0
+  return Math.round((price * lt.min_prepayment_pct) / 100 * 100) / 100
+})
+const requestPrepaymentMax = computed(() => {
+  const lt = selectedLessor.value?.lease_terms
+  const price = vehicle.value?.price
+  if (!lt || price == null) return 0
+  return Math.round((price * lt.max_prepayment_pct) / 100 * 100) / 100
+})
+
+function lessorEligible(l) {
+  const lt = l.lease_terms
+  const price = vehicle.value?.price
+  if (price == null) return false
+  if (!lt) return true
+  return price >= lt.min_asset_price && price <= lt.max_asset_price
+}
+
+function initRequestForm() {
+  const l = selectedLessor.value
+  const lt = l?.lease_terms
+  const price = vehicle.value?.price ?? 0
+  if (!lt || !price) {
+    requestForm.value = { lease_term: 24, prepayment: 0, comment: '' }
+    return
+  }
+  let term = Math.round((lt.min_term_months + lt.max_term_months) / 2)
+  term = Math.min(lt.max_term_months, Math.max(lt.min_term_months, term))
+  const midPct = (lt.min_prepayment_pct + lt.max_prepayment_pct) / 2
+  let prep = (price * midPct) / 100
+  const pMin = (price * lt.min_prepayment_pct) / 100
+  const pMax = (price * lt.max_prepayment_pct) / 100
+  prep = Math.min(pMax, Math.max(pMin, prep))
+  requestForm.value = {
+    lease_term: term,
+    prepayment: Math.round(prep * 100) / 100,
+    comment: '',
+  }
+}
+
 onMounted(async () => {
   try {
     const { data } = await vehiclesApi.get(route.params.id)
@@ -259,12 +346,28 @@ watch(showLessorModal, async (val) => {
 })
 
 function selectLessor(l) {
+  if (!lessorEligible(l)) return
   selectedLessor.value = l
+  initRequestForm()
   showLessorModal.value = false
   showRequestModal.value = true
 }
 
 async function submitRequest() {
+  const lt = selectedLessor.value?.lease_terms
+  const price = vehicle.value?.price
+  if (lt && price != null) {
+    const t = requestForm.value.lease_term
+    if (t < lt.min_term_months || t > lt.max_term_months) {
+      notifStore.showToast('Укажите срок лизинга в допустимом диапазоне', 'error')
+      return
+    }
+    const prep = requestForm.value.prepayment
+    if (prep < requestPrepaymentMin.value - 0.01 || prep > requestPrepaymentMax.value + 0.01) {
+      notifStore.showToast('Укажите первоначальный взнос в допустимом диапазоне', 'error')
+      return
+    }
+  }
   requestLoading.value = true
   try {
     await leasingApi.createRequest({

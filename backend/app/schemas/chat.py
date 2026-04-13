@@ -18,6 +18,12 @@ class ChatParticipantOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ChatPartnerOut(BaseModel):
+    id: int
+    display_name: str
+    avatar_url: str | None = None
+
+
 class MessageCreate(BaseModel):
     message_text: str
     file_url: str | None = None
@@ -41,4 +47,5 @@ class ChatOut(BaseModel):
     created_at: datetime
     participants: list[ChatParticipantOut] = []
     last_message: MessageOut | None = None
+    partner: ChatPartnerOut | None = None
     model_config = {"from_attributes": True}

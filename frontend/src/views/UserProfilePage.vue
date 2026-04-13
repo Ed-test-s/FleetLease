@@ -52,45 +52,105 @@
 
       <!-- Leasing Calculator (for lessors) -->
       <div v-if="user.role === 'lease_manager' && user.lease_terms" class="card p-6 mb-6">
-        <h3 class="text-lg font-bold text-gray-900 mb-4">Калькулятор лизинга</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-5">
+        <h3 class="text-lg font-bold text-gray-900 mb-6">Калькулятор лизинга</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div class="space-y-8">
+            <!-- Стоимость имущества -->
             <div>
-              <label class="label">Стоимость имущества (BYN)</label>
-              <div class="flex flex-wrap items-center gap-2 mb-1">
-                <input v-model.number="calc.asset_price" type="number"
-                       :min="user.lease_terms.min_asset_price" :max="user.lease_terms.max_asset_price" step="1000"
-                       class="input-field flex-1 min-w-[8rem]" />
-                <span class="text-sm font-bold text-primary-500">{{ formatPrice(calc.asset_price) }}</span>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                <span class="text-sm font-semibold text-gray-900">Стоимость имущества (BYN)</span>
+                <input
+                  type="number"
+                  :min="user.lease_terms.min_asset_price"
+                  :max="user.lease_terms.max_asset_price"
+                  step="1000"
+                  :value="calc.asset_price"
+                  class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm shadow-inner w-full sm:max-w-[14rem] sm:ml-auto text-right font-semibold text-gray-900"
+                  @input="onAssetPriceInput($event.target.value)"
+                />
               </div>
-              <input v-model.number="calc.asset_price" type="range"
-                     :min="user.lease_terms.min_asset_price" :max="user.lease_terms.max_asset_price" step="1000"
-                     class="w-full accent-primary-500" />
+              <input
+                v-model.number="calc.asset_price"
+                type="range"
+                :min="user.lease_terms.min_asset_price"
+                :max="user.lease_terms.max_asset_price"
+                step="1000"
+                class="w-full h-2 rounded-full appearance-none bg-gray-200 accent-emerald-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600"
+              />
+              <div class="flex justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
+                <span v-for="(t, i) in assetSliderTicks" :key="i">{{ formatMoneyShortBYN(t) }}</span>
+              </div>
             </div>
+
+            <!-- Первоначальный взнос -->
             <div>
-              <label class="label">Аванс: {{ clampedPrepaymentPct.toFixed(1) }}% — {{ formatPrice(prepaymentMoney) }}</label>
-              <div class="flex flex-wrap items-center gap-2 mb-1">
-                <span class="text-sm text-gray-500">Процент:</span>
-                <input v-model.number="prepaymentPct" type="number"
-                       :min="user.lease_terms.min_prepayment_pct" :max="user.lease_terms.max_prepayment_pct" step="0.1"
-                       class="input-field w-24" />
-                <span class="text-sm text-gray-500">%</span>
+              <div class="flex items-center gap-1 mb-2">
+                <span class="text-sm font-semibold text-gray-900">Первоначальный взнос</span>
+                <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-500" title="Процент аванса фиксируется при смене суммы вручную; при изменении стоимости имущества пересчитывается сумма в BYN">?</span>
               </div>
-              <input v-model.number="prepaymentPct" type="range"
-                     :min="user.lease_terms.min_prepayment_pct" :max="user.lease_terms.max_prepayment_pct" step="0.5"
-                     class="w-full accent-primary-500" />
+              <div class="flex flex-wrap gap-2 mb-2">
+                <input
+                  type="number"
+                  :min="prepaymentBynMin"
+                  :max="prepaymentBynMax"
+                  step="1"
+                  :value="Math.round(prepaymentMoney * 100) / 100"
+                  class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm shadow-inner flex-1 min-w-[8rem] text-right font-semibold"
+                  @input="onPrepaymentBynInput($event.target.value)"
+                />
+                <input
+                  v-model.number="prepaymentPct"
+                  type="number"
+                  :min="user.lease_terms.min_prepayment_pct"
+                  :max="user.lease_terms.max_prepayment_pct"
+                  step="0.1"
+                  class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm shadow-inner w-20 text-center font-semibold"
+                />
+                <span class="self-center text-sm text-gray-500">%</span>
+              </div>
+              <input
+                v-model.number="prepaymentPct"
+                type="range"
+                :min="user.lease_terms.min_prepayment_pct"
+                :max="user.lease_terms.max_prepayment_pct"
+                step="0.5"
+                class="w-full h-2 rounded-full appearance-none bg-gray-200 accent-emerald-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600"
+              />
+              <div class="flex justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
+                <span>{{ user.lease_terms.min_prepayment_pct }}%</span>
+                <span>{{ user.lease_terms.max_prepayment_pct }}%</span>
+              </div>
             </div>
+
+            <!-- Срок лизинга -->
             <div>
-              <label class="label">Срок лизинга</label>
-              <div class="flex flex-wrap items-center gap-2 mb-1">
-                <input v-model.number="calc.term_months" type="number"
-                       :min="user.lease_terms.min_term_months" :max="user.lease_terms.max_term_months" step="1"
-                       class="input-field w-24" />
-                <span class="text-sm font-bold text-primary-500">мес.</span>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                <span class="text-sm font-semibold text-gray-900">Срок лизинга</span>
+                <div class="flex items-center gap-2 sm:ml-auto">
+                  <input
+                    type="number"
+                    :min="user.lease_terms.min_term_months"
+                    :max="user.lease_terms.max_term_months"
+                    step="1"
+                    :value="calc.term_months"
+                    class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm shadow-inner w-24 text-right font-semibold"
+                    @input="onTermMonthsInput($event.target.value)"
+                  />
+                  <span class="text-sm text-gray-500">мес.</span>
+                </div>
               </div>
-              <input v-model.number="calc.term_months" type="range"
-                     :min="user.lease_terms.min_term_months" :max="user.lease_terms.max_term_months" step="1"
-                     class="w-full accent-primary-500" />
+              <input
+                v-model.number="calc.term_months"
+                type="range"
+                :min="user.lease_terms.min_term_months"
+                :max="user.lease_terms.max_term_months"
+                step="1"
+                class="w-full h-2 rounded-full appearance-none bg-gray-200 accent-emerald-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600"
+              />
+              <div class="flex justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
+                <span>{{ user.lease_terms.min_term_months }} мес.</span>
+                <span>{{ user.lease_terms.max_term_months }} мес.</span>
+              </div>
             </div>
           </div>
           <div class="bg-surface-50 rounded-xl p-6 flex flex-col justify-center">
@@ -111,7 +171,9 @@
           </div>
         </div>
         <!-- General conditions -->
-        <div class="mt-4 p-4 bg-surface-50 rounded-lg text-sm text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="mt-4 p-4 bg-surface-50 rounded-lg text-sm text-gray-600 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div><span class="text-gray-400 block">Мин. стоимость техники</span>{{ formatPrice(user.lease_terms.min_asset_price) }}</div>
+          <div><span class="text-gray-400 block">Макс. стоимость техники</span>{{ formatPrice(user.lease_terms.max_asset_price) }}</div>
           <div><span class="text-gray-400 block">Мин. срок</span>{{ user.lease_terms.min_term_months }} мес.</div>
           <div><span class="text-gray-400 block">Макс. срок</span>{{ user.lease_terms.max_term_months }} мес.</div>
           <div><span class="text-gray-400 block">Мин. аванс</span>{{ user.lease_terms.min_prepayment_pct }}%</div>
@@ -171,7 +233,7 @@ import { reviewsApi } from '@/api/reviews'
 import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
-import { formatPrice, formatDate, roleLabels, userTypeLabels, getRegistrationDate } from '@/utils/format'
+import { formatPrice, formatDate, formatMoneyShortBYN, roleLabels, userTypeLabels, getRegistrationDate } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StarRating from '@/components/common/StarRating.vue'
 
@@ -206,6 +268,55 @@ const prepaymentMoney = computed(() => {
   const p = Math.min(lt.max_prepayment_pct, Math.max(lt.min_prepayment_pct, prepaymentPct.value))
   return (price * p) / 100
 })
+
+const assetSliderTicks = computed(() => {
+  const lt = user.value?.lease_terms
+  if (!lt) return []
+  const min = lt.min_asset_price
+  const max = lt.max_asset_price
+  const n = 5
+  return Array.from({ length: n }, (_, i) => min + ((max - min) * i) / (n - 1))
+})
+
+const prepaymentBynMin = computed(() => {
+  const lt = user.value?.lease_terms
+  const price = calc.value.asset_price
+  if (!lt || price == null) return 0
+  return (price * lt.min_prepayment_pct) / 100
+})
+
+const prepaymentBynMax = computed(() => {
+  const lt = user.value?.lease_terms
+  const price = calc.value.asset_price
+  if (!lt || price == null) return 0
+  return (price * lt.max_prepayment_pct) / 100
+})
+
+function onAssetPriceInput(raw) {
+  const lt = user.value?.lease_terms
+  if (!lt) return
+  const n = parseFloat(String(raw).replace(/\s/g, '').replace(',', '.'))
+  if (Number.isNaN(n)) return
+  calc.value.asset_price = Math.min(lt.max_asset_price, Math.max(lt.min_asset_price, n))
+}
+
+function onPrepaymentBynInput(raw) {
+  const lt = user.value?.lease_terms
+  const price = calc.value.asset_price
+  if (!lt || price == null || price <= 0) return
+  const n = parseFloat(String(raw).replace(/\s/g, '').replace(',', '.'))
+  if (Number.isNaN(n)) return
+  const clamped = Math.min(prepaymentBynMax.value, Math.max(prepaymentBynMin.value, n))
+  prepaymentPct.value = (clamped / price) * 100
+}
+
+function onTermMonthsInput(raw) {
+  const lt = user.value?.lease_terms
+  if (!lt) return
+  const n = parseInt(String(raw).replace(/\D/g, ''), 10)
+  if (Number.isNaN(n)) return
+  calc.value.term_months = Math.min(lt.max_term_months, Math.max(lt.min_term_months, n))
+}
 
 const displayName = computed(() => {
   if (!user.value) return ''

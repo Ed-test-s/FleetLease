@@ -22,7 +22,20 @@
               <StatusBadge :status="r.status" />
             </div>
             <div class="text-sm text-gray-500 mt-1 space-y-0.5">
-              <p>Техника: <router-link :to="`/vehicles/${r.vehicle_id}`" class="text-primary-500 hover:underline">ID {{ r.vehicle_id }}</router-link></p>
+              <p>
+                Техника:
+                <router-link :to="`/vehicles/${r.vehicle_id}`" class="text-primary-500 hover:underline">
+                  {{ r.vehicle_name || `Объявление #${r.vehicle_id}` }}
+                </router-link>
+              </p>
+              <p v-if="(auth.userRole === 'lease_manager' || auth.userRole === 'admin') && r.client_label">
+                Лизингополучатель:
+                <router-link :to="`/users/${r.user_id}`" class="text-primary-500 hover:underline">{{ r.client_label }}</router-link>
+              </p>
+              <p v-if="auth.userRole === 'client' && r.lease_company_label">
+                Лизинговая компания:
+                <router-link :to="`/users/${r.lease_company_id}`" class="text-primary-500 hover:underline">{{ r.lease_company_label }}</router-link>
+              </p>
               <p>Срок: {{ r.lease_term }} мес. · Аванс: {{ formatPrice(r.prepayment) }}</p>
               <p v-if="r.comment" class="text-gray-400 italic">{{ r.comment }}</p>
               <p class="text-xs text-gray-400">{{ formatDateTime(r.created_at) }}</p>

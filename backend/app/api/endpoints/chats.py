@@ -9,12 +9,40 @@ from app.core.security import decode_access_token
 from app.models.chat import Chat, ChatParticipant, Message
 from app.models.notification import Notification
 from app.models.user import User
-from app.schemas.chat import ChatCreate, ChatOut, MessageCreate, MessageOut
+from app.schemas.chat import ChatCreate, ChatOut, ChatPartnerOut, MessageCreate, MessageOut
+from app.services.user_display import user_display_name
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 # In-memory WebSocket connections: {chat_id: {user_id: WebSocket}}
 active_connections: dict[int, dict[int, WebSocket]] = {}
+
+
+async def _chat_out_with_partner(
+    db: AsyncSession, chat: Chat, current_user_id: int
+) -> ChatOut:
+    co = ChatOut.model_validate(chat)
+    co.last_message = MessageOut.model_validate(chat.messages[-1]) if chat.messages else None
+    other_ids = [p.user_id for p in chat.participants if p.user_id != current_user_id]
+    if not other_ids:
+        co.partner = None
+        return co
+    ures = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.individual),
+            selectinload(User.entrepreneur),
+            selectinload(User.company),
+        )
+        .where(User.id == other_ids[0])
+    )
+    pu = ures.scalar_one_or_none()
+    if pu:
+        name = user_display_name(pu) or pu.login
+        co.partner = ChatPartnerOut(id=pu.id, display_name=name, avatar_url=pu.avatar_url)
+    else:
+        co.partner = None
+    return co
 
 
 @router.get("/", response_model=list[ChatOut])
@@ -34,9 +62,7 @@ async def list_chats(
 
     out = []
     for chat in chats:
-        co = ChatOut.model_validate(chat)
-        co.last_message = MessageOut.model_validate(chat.messages[-1]) if chat.messages else None
-        out.append(co)
+        out.append(await _chat_out_with_partner(db, chat, user.id))
     return out
 
 
@@ -59,9 +85,7 @@ async def get_chat(
     if user.id not in participant_ids:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    co = ChatOut.model_validate(chat)
-    co.last_message = MessageOut.model_validate(chat.messages[-1]) if chat.messages else None
-    return co
+    return await _chat_out_with_partner(db, chat, user.id)
 
 
 @router.get("/{chat_id}/messages", response_model=list[MessageOut])

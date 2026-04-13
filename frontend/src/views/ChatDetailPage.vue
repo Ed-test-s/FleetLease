@@ -4,8 +4,18 @@
       <router-link to="/chats" class="text-gray-400 hover:text-primary-500 transition-colors">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
       </router-link>
-      <h1 class="text-lg font-bold text-gray-900">Чат #{{ route.params.id }}</h1>
-      <span v-if="chat" class="badge text-[10px]" :class="chat.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">
+      <div v-if="chat?.partner" class="flex items-center gap-3 min-w-0 flex-1">
+        <div class="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-bold flex-shrink-0 overflow-hidden">
+          <img v-if="chat.partner.avatar_url" :src="chat.partner.avatar_url" class="w-full h-full object-cover" alt="" />
+          <span v-else>{{ chatPartnerInitial }}</span>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-lg font-bold text-gray-900 truncate">{{ chat.partner.display_name }}</h1>
+          <p class="text-xs text-gray-500">Чат #{{ route.params.id }}</p>
+        </div>
+      </div>
+      <h1 v-else class="text-lg font-bold text-gray-900">Чат #{{ route.params.id }}</h1>
+      <span v-if="chat" class="badge text-[10px] flex-shrink-0" :class="chat.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">
         {{ chat?.chat_type === 'request' ? 'Заявка' : 'Поставщик' }}
       </span>
 
@@ -42,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { chatsApi } from '@/api/chats'
 import { useAuthStore } from '@/stores/auth'
@@ -56,6 +66,11 @@ const messages = ref([])
 const messageText = ref('')
 const messagesContainer = ref(null)
 let ws = null
+
+const chatPartnerInitial = computed(() => {
+  const n = chat.value?.partner?.display_name
+  return n ? n.charAt(0).toUpperCase() : '?'
+})
 
 onMounted(async () => {
   const chatId = route.params.id

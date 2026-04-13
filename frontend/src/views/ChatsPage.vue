@@ -17,12 +17,13 @@
     <div v-else class="space-y-2">
       <router-link v-for="c in filteredChats" :key="c.id" :to="`/chats/${c.id}`"
                    class="card p-4 flex items-center gap-4 hover:shadow-md transition-shadow">
-        <div class="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-bold flex-shrink-0">
-          {{ c.chat_type === 'request' ? 'Л' : 'П' }}
+        <div class="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-bold flex-shrink-0 overflow-hidden">
+          <img v-if="c.partner?.avatar_url" :src="c.partner.avatar_url" class="w-full h-full object-cover" alt="" />
+          <span v-else>{{ partnerInitial(c) }}</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-medium text-gray-900">Чат #{{ c.id }}</span>
+            <span class="text-sm font-medium text-gray-900 truncate">{{ c.partner?.display_name || `Чат #${c.id}` }}</span>
             <span class="badge text-[10px]" :class="c.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">
               {{ c.chat_type === 'request' ? 'Заявка' : 'Поставщик' }}
             </span>
@@ -63,4 +64,10 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+function partnerInitial(c) {
+  const name = c.partner?.display_name || ''
+  if (name) return name.charAt(0).toUpperCase()
+  return c.chat_type === 'request' ? 'Л' : 'П'
+}
 </script>

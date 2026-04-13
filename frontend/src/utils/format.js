@@ -7,6 +7,21 @@ export function formatPrice(value) {
   }).format(value)
 }
 
+/** Краткий формат для подписей шкалы калькулятора (тыс. / млн BYN). */
+export function formatMoneyShortBYN(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  const v = Number(value)
+  if (v >= 1_000_000) {
+    const m = v / 1_000_000
+    return `${m % 1 < 0.05 ? Math.round(m) : m.toFixed(1)} млн BYN`
+  }
+  if (v >= 1000) {
+    const k = v / 1000
+    return `${Math.round(k)} тыс. BYN`
+  }
+  return formatPrice(v)
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('ru-RU', {

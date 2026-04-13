@@ -20,7 +20,9 @@ from app.models.leasing import (
     RequestStatus,
 )
 from app.models.notification import Notification
-from app.models.user import User, UserRole
+from app.models.user import LeaseTerm, User, UserRole
+from app.models.vehicle import Vehicle
+from app.services.user_display import user_display_name
 from app.schemas.leasing import (
     CalculatorRequest,
     CalculatorResponse,
@@ -39,6 +41,42 @@ from app.schemas.leasing import (
 )
 
 router = APIRouter(prefix="/leasing", tags=["leasing"])
+
+
+async def _lease_requests_out_batch(
+    db: AsyncSession, reqs: list[LeaseRequest]
+) -> list[LeaseRequestOut]:
+    if not reqs:
+        return []
+    v_ids = {r.vehicle_id for r in reqs}
+    u_ids = {r.user_id for r in reqs} | {r.lease_company_id for r in reqs}
+    vres = await db.execute(select(Vehicle.id, Vehicle.name).where(Vehicle.id.in_(v_ids)))
+    vmap = {row[0]: row[1] for row in vres.all()}
+    ures = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.individual),
+            selectinload(User.entrepreneur),
+            selectinload(User.company),
+        )
+        .where(User.id.in_(u_ids))
+    )
+    umap = {u.id: u for u in ures.scalars().unique().all()}
+    out: list[LeaseRequestOut] = []
+    for req in reqs:
+        lo = LeaseRequestOut.model_validate(req)
+        lessee = umap.get(req.user_id)
+        lessor = umap.get(req.lease_company_id)
+        out.append(
+            lo.model_copy(
+                update={
+                    "vehicle_name": vmap.get(req.vehicle_id),
+                    "client_label": user_display_name(lessee),
+                    "lease_company_label": user_display_name(lessor),
+                }
+            )
+        )
+    return out
 
 
 # ── Calculator ────────────────────────────────────────────────────────
@@ -72,6 +110,31 @@ async def create_request(
     user: User = Depends(require_role(UserRole.CLIENT)),
     db: AsyncSession = Depends(get_db),
 ):
+    vehicle = await db.get(Vehicle, data.vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    lt_result = await db.execute(select(LeaseTerm).where(LeaseTerm.user_id == data.lease_company_id))
+    lt = lt_result.scalar_one_or_none()
+    if lt:
+        if vehicle.price < lt.min_asset_price or vehicle.price > lt.max_asset_price:
+            raise HTTPException(
+                status_code=400,
+                detail="Стоимость техники не входит в допустимый для выбранного лизингодателя диапазон",
+            )
+        if data.lease_term < lt.min_term_months or data.lease_term > lt.max_term_months:
+            raise HTTPException(
+                status_code=400,
+                detail="Срок лизинга вне допустимого диапазона для выбранного лизингодателя",
+            )
+        min_prep = vehicle.price * lt.min_prepayment_pct / 100.0
+        max_prep = vehicle.price * lt.max_prepayment_pct / 100.0
+        if data.prepayment < min_prep - 0.01 or data.prepayment > max_prep + 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail="Первоначальный взнос вне допустимого диапазона для выбранного лизингодателя",
+            )
+
     req = LeaseRequest(user_id=user.id, **data.model_dump())
     db.add(req)
     await db.flush()
@@ -89,7 +152,8 @@ async def create_request(
     ))
 
     await db.flush()
-    return req
+    enriched = await _lease_requests_out_batch(db, [req])
+    return enriched[0]
 
 
 @router.get("/requests", response_model=list[LeaseRequestOut])
@@ -114,7 +178,8 @@ async def list_requests(
         q = q.where(LeaseRequest.status == status)
     q = q.order_by(LeaseRequest.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(q)
-    return result.scalars().all()
+    rows = result.scalars().all()
+    return await _lease_requests_out_batch(db, list(rows))
 
 
 @router.get("/requests/{request_id}", response_model=LeaseRequestOut)
@@ -131,7 +196,8 @@ async def get_request(
         raise HTTPException(status_code=403, detail="Access denied")
     if user.role == UserRole.LEASE_MANAGER and req.lease_company_id != user.id:
         raise HTTPException(status_code=403, detail="Access denied")
-    return req
+    enriched = await _lease_requests_out_batch(db, [req])
+    return enriched[0]
 
 
 @router.patch("/requests/{request_id}/status", response_model=LeaseRequestOut)
@@ -161,7 +227,8 @@ async def update_request_status(
         text=f"Ваша заявка #{req.id} {status_labels.get(data.status, 'обновлена')}.",
     ))
     await db.flush()
-    return req
+    enriched = await _lease_requests_out_batch(db, [req])
+    return enriched[0]
 
 
 # ── Contracts ─────────────────────────────────────────────────────────
