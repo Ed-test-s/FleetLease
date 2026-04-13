@@ -26,8 +26,22 @@
           </div>
         </div>
 
-        <!-- Contact info (public) -->
-        <div v-if="user.contacts?.length" class="mt-4 flex flex-wrap gap-4 text-sm">
+        <!-- Contact info (public): телефоны и email отдельными строками для поставщика и лизингодателя -->
+        <div v-if="(user.role === 'supplier' || user.role === 'lease_manager') && user.contacts?.length" class="mt-4 space-y-3 text-sm">
+          <div v-if="publicPhones.length" class="flex flex-wrap gap-x-4 gap-y-2 text-gray-600">
+            <div v-for="c in publicPhones" :key="c.id" class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+              {{ c.value }}
+            </div>
+          </div>
+          <div v-if="publicEmails.length" class="flex flex-wrap gap-x-4 gap-y-2 text-gray-600">
+            <div v-for="c in publicEmails" :key="c.id" class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              {{ c.value }}
+            </div>
+          </div>
+        </div>
+        <div v-else-if="user.contacts?.length" class="mt-4 flex flex-wrap gap-4 text-sm">
           <div v-for="c in user.contacts" :key="c.id" class="flex items-center gap-1.5 text-gray-600">
             <svg v-if="c.type === 'phone'" class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
             <svg v-else class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -42,25 +56,40 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-5">
             <div>
-              <label class="label">Стоимость имущества (BYN): <span class="font-bold text-primary-500">{{ formatPrice(calc.asset_price) }}</span></label>
+              <label class="label">Стоимость имущества (BYN)</label>
+              <div class="flex flex-wrap items-center gap-2 mb-1">
+                <input v-model.number="calc.asset_price" type="number"
+                       :min="user.lease_terms.min_asset_price" :max="user.lease_terms.max_asset_price" step="1000"
+                       class="input-field flex-1 min-w-[8rem]" />
+                <span class="text-sm font-bold text-primary-500">{{ formatPrice(calc.asset_price) }}</span>
+              </div>
               <input v-model.number="calc.asset_price" type="range"
                      :min="user.lease_terms.min_asset_price" :max="user.lease_terms.max_asset_price" step="1000"
                      class="w-full accent-primary-500" />
             </div>
             <div>
-              <label class="label">
-                Аванс: <span class="font-bold text-primary-500">{{ formatPrice(calc.prepayment) }}</span>
-                <span class="text-gray-400 ml-1">({{ prepaymentPct.toFixed(1) }}%)</span>
-              </label>
-              <input v-model.number="calc.prepayment" type="range"
-                     :min="calc.asset_price * user.lease_terms.min_prepayment_pct / 100"
-                     :max="calc.asset_price * user.lease_terms.max_prepayment_pct / 100" step="500"
+              <label class="label">Аванс: {{ clampedPrepaymentPct.toFixed(1) }}% — {{ formatPrice(prepaymentMoney) }}</label>
+              <div class="flex flex-wrap items-center gap-2 mb-1">
+                <span class="text-sm text-gray-500">Процент:</span>
+                <input v-model.number="prepaymentPct" type="number"
+                       :min="user.lease_terms.min_prepayment_pct" :max="user.lease_terms.max_prepayment_pct" step="0.1"
+                       class="input-field w-24" />
+                <span class="text-sm text-gray-500">%</span>
+              </div>
+              <input v-model.number="prepaymentPct" type="range"
+                     :min="user.lease_terms.min_prepayment_pct" :max="user.lease_terms.max_prepayment_pct" step="0.5"
                      class="w-full accent-primary-500" />
             </div>
             <div>
-              <label class="label">Срок лизинга: <span class="font-bold text-primary-500">{{ calc.term_months }} мес.</span></label>
+              <label class="label">Срок лизинга</label>
+              <div class="flex flex-wrap items-center gap-2 mb-1">
+                <input v-model.number="calc.term_months" type="number"
+                       :min="user.lease_terms.min_term_months" :max="user.lease_terms.max_term_months" step="1"
+                       class="input-field w-24" />
+                <span class="text-sm font-bold text-primary-500">мес.</span>
+              </div>
               <input v-model.number="calc.term_months" type="range"
-                     :min="user.lease_terms.min_term_months" :max="user.lease_terms.max_term_months"
+                     :min="user.lease_terms.min_term_months" :max="user.lease_terms.max_term_months" step="1"
                      class="w-full accent-primary-500" />
             </div>
           </div>
@@ -156,8 +185,27 @@ const vehicles = ref([])
 const reviews = ref([])
 const reviewForm = ref({ rating: 5, comment: '' })
 
-const calc = ref({ asset_price: 50000, prepayment: 10000, term_months: 24 })
+const calc = ref({ asset_price: 50000, term_months: 24 })
+/** Доля аванса в %; при смене стоимости имущества процент не меняется, пересчитывается сумма. */
+const prepaymentPct = ref(20)
 const calcResult = ref(null)
+
+const publicPhones = computed(() => (user.value?.contacts || []).filter((c) => c.type === 'phone'))
+const publicEmails = computed(() => (user.value?.contacts || []).filter((c) => c.type === 'email'))
+
+const clampedPrepaymentPct = computed(() => {
+  const lt = user.value?.lease_terms
+  if (!lt) return prepaymentPct.value
+  return Math.min(lt.max_prepayment_pct, Math.max(lt.min_prepayment_pct, prepaymentPct.value))
+})
+
+const prepaymentMoney = computed(() => {
+  const lt = user.value?.lease_terms
+  const price = calc.value.asset_price
+  if (!lt || price == null || Number.isNaN(price)) return 0
+  const p = Math.min(lt.max_prepayment_pct, Math.max(lt.min_prepayment_pct, prepaymentPct.value))
+  return (price * p) / 100
+})
 
 const displayName = computed(() => {
   if (!user.value) return ''
@@ -170,28 +218,26 @@ const displayName = computed(() => {
   return user.value.login
 })
 
-const prepaymentPct = computed(() => {
-  if (!calc.value.asset_price) return 0
-  return (calc.value.prepayment / calc.value.asset_price) * 100
-})
-
 onMounted(() => loadUser())
 
 watch(() => route.params.id, () => loadUser())
 
-watch(calc, async () => {
-  if (user.value?.role === 'lease_manager' && user.value.lease_terms) {
+watch(
+  [calc, prepaymentPct, () => user.value?.lease_terms?.interest_rate],
+  async () => {
+    if (user.value?.role !== 'lease_manager' || !user.value.lease_terms) return
     try {
       const { data } = await leasingApi.calculate({
         asset_price: calc.value.asset_price,
-        prepayment: calc.value.prepayment,
+        prepayment: prepaymentMoney.value,
         term_months: calc.value.term_months,
         interest_rate: user.value.lease_terms.interest_rate,
       })
       calcResult.value = data
     } catch { /* ignore calc errors */ }
-  }
-}, { deep: true, immediate: false })
+  },
+  { deep: true, immediate: false },
+)
 
 async function loadUser() {
   loading.value = true
@@ -208,14 +254,16 @@ async function loadUser() {
     reviews.value = rRes.data
 
     if (data.role === 'lease_manager' && data.lease_terms) {
-      calc.value.asset_price = (data.lease_terms.min_asset_price + data.lease_terms.max_asset_price) / 2
-      calc.value.prepayment = calc.value.asset_price * data.lease_terms.min_prepayment_pct / 100
-      calc.value.term_months = Math.round((data.lease_terms.min_term_months + data.lease_terms.max_term_months) / 2)
+      const lt = data.lease_terms
+      calc.value.asset_price = (lt.min_asset_price + lt.max_asset_price) / 2
+      prepaymentPct.value = (lt.min_prepayment_pct + lt.max_prepayment_pct) / 2
+      calc.value.term_months = Math.round((lt.min_term_months + lt.max_term_months) / 2)
+      const prepayment = (calc.value.asset_price * prepaymentPct.value) / 100
       const { data: cRes } = await leasingApi.calculate({
         asset_price: calc.value.asset_price,
-        prepayment: calc.value.prepayment,
+        prepayment,
         term_months: calc.value.term_months,
-        interest_rate: data.lease_terms.interest_rate,
+        interest_rate: lt.interest_rate,
       })
       calcResult.value = cRes
     }

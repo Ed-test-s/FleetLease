@@ -23,6 +23,7 @@
             <span>Аванс: {{ l.lease_terms.min_prepayment_pct }}–{{ l.lease_terms.max_prepayment_pct }}%</span>
             <span>Ставка: {{ l.lease_terms.interest_rate }}%</span>
           </div>
+          <p v-else class="text-xs text-amber-700 mt-1">Условия не указаны</p>
           <StarRating v-if="l.rating" :rating="l.rating" class="mt-1" />
         </div>
         <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

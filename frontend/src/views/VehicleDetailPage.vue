@@ -70,18 +70,42 @@
           <div class="card p-6">
             <h3 class="text-sm font-semibold text-gray-800 mb-4">Характеристики</h3>
             <div class="space-y-2.5">
-              <SpecRow label="Тип ТС" :value="vehicle.vehicle_type" />
-              <SpecRow label="Год выпуска" :value="vehicle.release_year" />
-              <SpecRow label="Пробег" :value="vehicle.mileage != null ? formatMileage(vehicle.mileage) : null" />
-              <SpecRow label="VIN" :value="vehicle.vin" />
-              <SpecRow label="Цвет" :value="vehicle.colour" />
-              <SpecRow label="Местоположение" :value="vehicle.location" />
-              <SpecRow label="Тип двигателя" :value="vehicle.fuel_type" />
-              <SpecRow label="Объём двигателя" :value="vehicle.engine_capacity ? `${vehicle.engine_capacity} л` : null" />
-              <SpecRow label="Мощность" :value="vehicle.hp ? `${vehicle.hp} л.с.` : null" />
-              <SpecRow label="Трансмиссия" :value="vehicle.transmission" />
-              <SpecRow label="Привод" :value="vehicle.drive_type" />
-              <SpecRow label="Код предложения" :value="vehicle.product_code" />
+              <div v-if="hasSpec(vehicle.vehicle_type)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Тип ТС</span><span class="font-medium text-gray-800 text-right">{{ vehicle.vehicle_type }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.release_year)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Год выпуска</span><span class="font-medium text-gray-800 text-right">{{ vehicle.release_year }}</span>
+              </div>
+              <div v-if="vehicle.mileage != null" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Пробег</span><span class="font-medium text-gray-800 text-right">{{ formatMileage(vehicle.mileage) }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.vin)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">VIN</span><span class="font-medium text-gray-800 text-right break-all">{{ vehicle.vin }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.colour)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Цвет</span><span class="font-medium text-gray-800 text-right">{{ vehicle.colour }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.location)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Местоположение</span><span class="font-medium text-gray-800 text-right">{{ vehicle.location }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.fuel_type)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Тип двигателя</span><span class="font-medium text-gray-800 text-right">{{ vehicle.fuel_type }}</span>
+              </div>
+              <div v-if="vehicle.engine_capacity != null" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Объём двигателя</span><span class="font-medium text-gray-800 text-right">{{ vehicle.engine_capacity }} л</span>
+              </div>
+              <div v-if="vehicle.hp != null" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Мощность</span><span class="font-medium text-gray-800 text-right">{{ vehicle.hp }} л.с.</span>
+              </div>
+              <div v-if="hasSpec(vehicle.transmission)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Трансмиссия</span><span class="font-medium text-gray-800 text-right">{{ vehicle.transmission }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.drive_type)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Привод</span><span class="font-medium text-gray-800 text-right">{{ vehicle.drive_type }}</span>
+              </div>
+              <div v-if="hasSpec(vehicle.product_code)" class="flex justify-between text-sm gap-4">
+                <span class="text-gray-500">Код предложения</span><span class="font-medium text-gray-800 text-right">{{ vehicle.product_code }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -181,7 +205,11 @@ import { formatPrice, formatMileage } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StarRating from '@/components/common/StarRating.vue'
 
-const SpecRow = { props: ['label', 'value'], template: `<div v-if="value" class="flex justify-between text-sm"><span class="text-gray-500">{{ label }}</span><span class="font-medium text-gray-800">{{ value }}</span></div>` }
+function hasSpec(v) {
+  if (v === null || v === undefined) return false
+  if (typeof v === 'string') return v.trim() !== ''
+  return true
+}
 
 const route = useRoute()
 const auth = useAuthStore()

@@ -1,6 +1,8 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.user import ContactType, UserRole, UserType
 
@@ -73,12 +75,26 @@ class CompanyOut(CompanyCreate):
 
 
 # ── Bank Account ──────────────────────────────────────────────────────
+_BANK_CODE_RE = re.compile(r"^[a-zA-Zа-яА-ЯёЁ0-9]+$")
+
+
 class BankAccountCreate(BaseModel):
     iban: str | None = None
     bank_name: str | None = None
     bank_address: str | None = None
     swift: str | None = None
     bic: str | None = None
+
+    @field_validator("iban", "swift", "bic")
+    @classmethod
+    def latin_cyrillic_digits_only(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return v
+        if not _BANK_CODE_RE.fullmatch(v):
+            raise ValueError(
+                "Поля IBAN, BIC и SWIFT: только латиница, кириллица и цифры, без пробелов"
+            )
+        return v
 
 
 class BankAccountOut(BankAccountCreate):

@@ -171,11 +171,15 @@ async def delete_vehicle(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.supplier_id == user.id)
+        select(Vehicle)
+        .options(selectinload(Vehicle.images))
+        .where(Vehicle.id == vehicle_id, Vehicle.supplier_id == user.id)
     )
     vehicle = result.scalar_one_or_none()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found or access denied")
+    for img in vehicle.images:
+        storage_service.remove_object_by_url(img.image_url)
     await db.delete(vehicle)
 
 
@@ -195,7 +199,7 @@ async def upload_vehicle_image(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found or access denied")
 
-    url = await storage_service.upload_file(file, folder="vehicles")
+    url = await storage_service.upload_file(file, folder=f"vehicles/{vehicle_id}")
     db.add(VehicleImage(vehicle_id=vehicle.id, image_url=url))
     await db.flush()
 
@@ -228,4 +232,5 @@ async def delete_vehicle_image(
     if not v_result.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="Access denied")
 
+    storage_service.remove_object_by_url(img.image_url)
     await db.delete(img)

@@ -146,16 +146,30 @@
             </select>
           </div>
 
-          <div>
-            <label class="label">Объём двигателя, л</label>
-            <input v-model.number="filters.engine_capacity_min" @input="debouncedFetch" type="number" step="0.1"
-                   class="input-field" placeholder="От" />
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="label">Объём двиг., л — от</label>
+              <input v-model.number="filters.engine_capacity_min" @input="debouncedFetch" type="number" step="0.1"
+                     class="input-field" placeholder="От" />
+            </div>
+            <div>
+              <label class="label">Объём двиг., л — до</label>
+              <input v-model.number="filters.engine_capacity_max" @input="debouncedFetch" type="number" step="0.1"
+                     class="input-field" placeholder="До" />
+            </div>
           </div>
 
-          <div>
-            <label class="label">Мощность, л.с.</label>
-            <input v-model.number="filters.hp_min" @input="debouncedFetch" type="number"
-                   class="input-field" placeholder="От" />
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="label">Мощность, л.с. — от</label>
+              <input v-model.number="filters.hp_min" @input="debouncedFetch" type="number"
+                     class="input-field" placeholder="От" />
+            </div>
+            <div>
+              <label class="label">Мощность, л.с. — до</label>
+              <input v-model.number="filters.hp_max" @input="debouncedFetch" type="number"
+                     class="input-field" placeholder="До" />
+            </div>
           </div>
 
           <div>
@@ -257,7 +271,7 @@ const filters = ref({
   mileage_min: null, mileage_max: null, fuel_type: '', drive_type: '',
   colour: null, region_id: null, city_id: null, in_stock: false,
   sort_by: 'newest', transmission: '',
-  engine_capacity_min: null, hp_min: null,
+  engine_capacity_min: null, engine_capacity_max: null, hp_min: null, hp_max: null,
 })
 
 const brandOptions = computed(() =>
@@ -351,7 +365,7 @@ function resetFilters() {
     mileage_min: null, mileage_max: null, fuel_type: '', drive_type: '',
     colour: null, region_id: null, city_id: null, in_stock: false,
     sort_by: 'newest', transmission: '',
-    engine_capacity_min: null, hp_min: null,
+    engine_capacity_min: null, engine_capacity_max: null, hp_min: null, hp_max: null,
   }
   supplierTypes.value = []
   fetchVehicles()

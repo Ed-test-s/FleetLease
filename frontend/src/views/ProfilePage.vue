@@ -191,7 +191,23 @@ async function deleteContact(id) {
   await auth.fetchUser()
 }
 
+const bankCodeRe = /^[a-zA-Zа-яА-ЯёЁ0-9]+$/
+
 async function addBankAccount() {
+  const { iban, swift, bic } = newBankAccount.value
+  for (const [label, val] of [
+    ['IBAN', iban],
+    ['SWIFT', swift],
+    ['BIC', bic],
+  ]) {
+    if (val && !bankCodeRe.test(val)) {
+      notifStore.showToast(
+        `${label}, BIC, SWIFT: только латиница, кириллица и цифры, без пробелов`,
+        'error',
+      )
+      return
+    }
+  }
   await usersApi.addBankAccount(newBankAccount.value)
   await auth.fetchUser()
   newBankAccount.value = { iban: '', bank_name: '', bank_address: '', swift: '', bic: '' }

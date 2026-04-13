@@ -143,16 +143,27 @@
         <label for="visible" class="text-sm text-gray-700">Объявление активно (видно всем)</label>
       </div>
 
-      <!-- Images upload (for edit mode) -->
-      <div v-if="isEdit" class="border-t border-surface-200 pt-4">
+      <div class="border-t border-surface-200 pt-4">
         <label class="label">Фотографии</label>
-        <div class="flex gap-2 flex-wrap mb-3">
-          <div v-for="img in currentImages" :key="img.id" class="relative w-24 h-24 rounded-lg overflow-hidden border border-surface-200">
-            <img :src="img.image_url" class="w-full h-full object-cover" />
-            <button type="button" @click="removeImage(img.id)" class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">&times;</button>
+        <template v-if="isEdit">
+          <div class="flex gap-2 flex-wrap mb-3">
+            <div v-for="img in currentImages" :key="img.id" class="relative w-24 h-24 rounded-lg overflow-hidden border border-surface-200">
+              <img :src="img.image_url" class="w-full h-full object-cover" />
+              <button type="button" @click="removeImage(img.id)" class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">&times;</button>
+            </div>
           </div>
-        </div>
-        <input type="file" accept="image/*" @change="uploadImage" class="text-sm" />
+          <input type="file" accept="image/*" @change="uploadImage" class="text-sm" />
+        </template>
+        <template v-else>
+          <div class="flex gap-2 flex-wrap mb-3">
+            <div v-for="(p, idx) in pendingPreviews" :key="idx" class="relative w-24 h-24 rounded-lg overflow-hidden border border-surface-200">
+              <img :src="p" class="w-full h-full object-cover" alt="" />
+              <button type="button" @click="removePending(idx)" class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">&times;</button>
+            </div>
+          </div>
+          <input type="file" accept="image/*" multiple @change="onPickImages" class="text-sm" />
+          <p class="text-xs text-gray-500 mt-1">Можно выбрать несколько файлов — они будут загружены сразу после создания объявления.</p>
+        </template>
       </div>
 
       <div class="flex gap-3">
@@ -180,6 +191,8 @@ const notifStore = useNotificationsStore()
 const isEdit = computed(() => !!route.params.id)
 const submitting = ref(false)
 const currentImages = ref([])
+const pendingFiles = ref([])
+const pendingPreviews = ref([])
 
 const brands = ref([])
 const colours = ref([])
@@ -271,8 +284,14 @@ async function handleSubmit() {
       notifStore.showToast('Объявление обновлено', 'success')
     } else {
       const { data } = await vehiclesApi.create(payload)
+      for (const file of pendingFiles.value) {
+        await vehiclesApi.uploadImage(data.id, file)
+      }
+      pendingPreviews.value.forEach((url) => URL.revokeObjectURL(url))
+      pendingFiles.value = []
+      pendingPreviews.value = []
       notifStore.showToast('Объявление создано', 'success')
-      router.push(`/my-vehicles/${data.id}/edit`)
+      router.push('/my-vehicles')
       return
     }
     router.push('/my-vehicles')
@@ -281,6 +300,21 @@ async function handleSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+function onPickImages(e) {
+  const files = Array.from(e.target.files || [])
+  for (const file of files) {
+    pendingFiles.value.push(file)
+    pendingPreviews.value.push(URL.createObjectURL(file))
+  }
+  e.target.value = ''
+}
+
+function removePending(idx) {
+  URL.revokeObjectURL(pendingPreviews.value[idx])
+  pendingFiles.value.splice(idx, 1)
+  pendingPreviews.value.splice(idx, 1)
 }
 
 async function uploadImage(e) {

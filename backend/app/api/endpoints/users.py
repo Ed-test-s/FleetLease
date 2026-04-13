@@ -75,7 +75,9 @@ async def upload_avatar(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    url = await storage_service.upload_file(file, folder="avatars")
+    if user.avatar_url:
+        storage_service.remove_object_by_url(user.avatar_url)
+    url = await storage_service.upload_file(file, folder=f"avatars/{user.id}")
     user.avatar_url = url
     await db.flush()
     rating, count = await _enrich_user_rating(db, user.id)
