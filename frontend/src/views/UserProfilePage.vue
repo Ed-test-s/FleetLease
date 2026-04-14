@@ -75,7 +75,7 @@
                 :min="user.lease_terms.min_asset_price"
                 :max="user.lease_terms.max_asset_price"
                 step="1000"
-                class="w-full h-2 rounded-full appearance-none bg-gray-200 accent-emerald-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600"
+                class="lease-slider"
               />
               <div class="flex justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
                 <span v-for="(t, i) in assetSliderTicks" :key="i">{{ formatMoneyShortBYN(t) }}</span>
@@ -114,7 +114,7 @@
                 :min="user.lease_terms.min_prepayment_pct"
                 :max="user.lease_terms.max_prepayment_pct"
                 step="0.5"
-                class="w-full h-2 rounded-full appearance-none bg-gray-200 accent-emerald-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600"
+                class="lease-slider"
               />
               <div class="flex justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
                 <span>{{ user.lease_terms.min_prepayment_pct }}%</span>
@@ -145,7 +145,7 @@
                 :min="user.lease_terms.min_term_months"
                 :max="user.lease_terms.max_term_months"
                 step="1"
-                class="w-full h-2 rounded-full appearance-none bg-gray-200 accent-emerald-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-emerald-600"
+                class="lease-slider"
               />
               <div class="flex justify-between text-[11px] text-gray-400 mt-1.5 px-0.5">
                 <span>{{ user.lease_terms.min_term_months }} мес.</span>
@@ -395,3 +395,35 @@ async function submitReview() {
   }
 }
 </script>
+
+
+
+<!-- колхоз с цветом ползунков для калькулятора лизинга. Указали через css селекторы -->
+<style scoped>
+/* Трек ползунка */
+input[type="range"].lease-slider {
+  @apply w-full h-2 rounded-full appearance-none bg-gray-200 accent-blue-600;
+}
+
+/* Ползунок для Chrome/Safari/Edge */
+input[type="range"].lease-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: white;
+  border: 2px solid #2563eb;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+/* Ползунок для Firefox */
+input[type="range"].lease-slider::-moz-range-thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  background: white;
+  border: 2px solid #2563eb;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+</style>
