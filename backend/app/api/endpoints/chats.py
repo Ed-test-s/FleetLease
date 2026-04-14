@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,6 +10,7 @@ from app.models.chat import Chat, ChatParticipant, Message
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.chat import ChatCreate, ChatOut, ChatPartnerOut, MessageCreate, MessageOut
+from app.services.storage import storage_service
 from app.services.user_display import user_display_name
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -114,22 +115,24 @@ async def get_messages(
     return result.scalars().all()
 
 
-@router.post("/{chat_id}/messages", response_model=MessageOut, status_code=201)
-async def send_message(
-    chat_id: int,
-    data: MessageCreate,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def _assert_chat_participant(db: AsyncSession, chat_id: int, user_id: int) -> None:
     part_check = await db.execute(
         select(ChatParticipant).where(
-            ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user.id
+            ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id
         )
     )
     if not part_check.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="Access denied")
 
-    msg = Message(chat_id=chat_id, sender_id=user.id, message_text=data.message_text, file_url=data.file_url)
+
+async def _send_message_and_notify(
+    db: AsyncSession,
+    chat_id: int,
+    user: User,
+    message_text: str,
+    file_url: str | None,
+) -> Message:
+    msg = Message(chat_id=chat_id, sender_id=user.id, message_text=message_text, file_url=file_url)
     db.add(msg)
     await db.flush()
 
@@ -154,6 +157,30 @@ async def send_message(
                     pass
 
     return msg
+
+
+@router.post("/{chat_id}/messages/attachment", response_model=MessageOut, status_code=201)
+async def send_message_with_attachment(
+    chat_id: int,
+    message_text: str = Form(...),
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _assert_chat_participant(db, chat_id, user.id)
+    file_url = await storage_service.upload_file(file, folder=f"chat_files/{chat_id}")
+    return await _send_message_and_notify(db, chat_id, user, message_text, file_url)
+
+
+@router.post("/{chat_id}/messages", response_model=MessageOut, status_code=201)
+async def send_message(
+    chat_id: int,
+    data: MessageCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _assert_chat_participant(db, chat_id, user.id)
+    return await _send_message_and_notify(db, chat_id, user, data.message_text, None)
 
 
 @router.websocket("/{chat_id}/ws")

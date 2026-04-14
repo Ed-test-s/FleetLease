@@ -7,4 +7,10 @@ export const chatsApi = {
     api.get(`/chats/${chatId}/messages`, { params }),
   sendMessage: (chatId, data) =>
     api.post(`/chats/${chatId}/messages`, data),
+  sendMessageWithAttachment: (chatId, { messageText, file }) => {
+    const fd = new FormData()
+    fd.append('message_text', messageText)
+    fd.append('file', file)
+    return api.post(`/chats/${chatId}/messages/attachment`, fd)
+  },
 }

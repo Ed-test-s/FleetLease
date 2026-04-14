@@ -26,7 +26,6 @@ class ChatPartnerOut(BaseModel):
 
 class MessageCreate(BaseModel):
     message_text: str
-    file_url: str | None = None
 
 
 class MessageOut(BaseModel):

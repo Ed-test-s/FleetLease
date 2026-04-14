@@ -109,10 +109,11 @@ async function sendMessage() {
 async function handleFileUpload(e) {
   const file = e.target.files[0]
   if (!file) return
-  const { data } = await chatsApi.sendMessage(route.params.id, {
-    message_text: `Файл: ${file.name}`,
-    file_url: URL.createObjectURL(file),
+  const { data } = await chatsApi.sendMessageWithAttachment(route.params.id, {
+    messageText: `Файл: ${file.name}`,
+    file,
   })
+  e.target.value = ''
   messages.value.push(data)
   await nextTick()
   scrollToBottom()
