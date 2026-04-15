@@ -113,7 +113,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="sm:col-span-2">
               <label class="label">ФИО</label>
-              <input v-model="entrepreneur.full_name" type="text" class="input-field" placeholder="ИП Кушнарев Дмитрий Васильевич" required />
+              <input v-model="entrepreneur.full_name" type="text" class="input-field" placeholder="Кушнарев Дмитрий Васильевич" required />
             </div>
             <div>
               <label class="label">УНП</label>

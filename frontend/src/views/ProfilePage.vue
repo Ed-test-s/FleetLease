@@ -33,6 +33,67 @@
         </div>
       </div>
 
+      <!-- Registration data (read-only) -->
+      <div class="card p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-800 mb-3">Регистрационные данные</h3>
+
+        <div v-if="auth.user.user_type === 'individual'" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p class="text-gray-500">Адрес прописки</p>
+            <p class="text-gray-900">{{ auth.user.individual?.registration_address || '—' }}</p>
+          </div>
+        </div>
+
+        <div v-else-if="auth.user.user_type === 'ie'" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p class="text-gray-500">Почтовый адрес</p>
+            <p class="text-gray-900">{{ auth.user.entrepreneur?.postal_address || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-gray-500">Юридический адрес</p>
+            <p class="text-gray-900">{{ auth.user.entrepreneur?.legal_address || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-gray-500">УНП</p>
+            <p class="text-gray-900">{{ auth.user.entrepreneur?.unp || '—' }}</p>
+          </div>
+        </div>
+
+        <div v-else-if="auth.user.user_type === 'company'" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p class="text-gray-500">Название</p>
+            <p class="text-gray-900">
+              {{ auth.user.company?.legal_form || '' }}
+              <span v-if="auth.user.company?.company_name">
+                {{ auth.user.company?.legal_form ? ' ' : '' }}«{{ auth.user.company?.company_name }}»
+              </span>
+              <span v-else>—</span>
+            </p>
+          </div>
+          <div>
+            <p class="text-gray-500">ФИО директора</p>
+            <p class="text-gray-900">{{ auth.user.company?.director_name || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-gray-500">УНП</p>
+            <p class="text-gray-900">{{ auth.user.company?.unp || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-gray-500">ОКПО</p>
+            <p class="text-gray-900">{{ auth.user.company?.okpo || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-gray-500">Юридический адрес</p>
+            <p class="text-gray-900">{{ auth.user.company?.legal_address || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-gray-500">Почтовый адрес</p>
+            <p class="text-gray-900">{{ auth.user.company?.postal_address || '—' }}</p>
+          </div>
+          
+        </div>
+      </div>
+
       <!-- Description edit -->
       <div class="card p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-800 mb-3">Описание</h3>
