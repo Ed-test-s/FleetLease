@@ -155,6 +155,10 @@
           </div>
           <div class="bg-surface-50 rounded-xl p-6 flex flex-col justify-center">
             <div class="space-y-4">
+              <p class="text-sm text-gray-600">
+                При ставке лизинговой компании:
+                <span class="font-semibold text-gray-900">{{ user.lease_terms.interest_rate }}%</span>
+              </p>
               <div>
                 <p class="text-sm text-gray-500">Ежемесячный платёж</p>
                 <p class="text-2xl font-bold text-primary-500">{{ calcResult ? formatPrice(calcResult.monthly_payment) : '—' }}</p>
