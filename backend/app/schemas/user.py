@@ -33,6 +33,7 @@ class ContactOut(ContactCreate):
 # ── Individual ────────────────────────────────────────────────────────
 class IndividualCreate(BaseModel):
     full_name: str
+    registration_address: str | None = None
     passport_id: str | None = None
     passport_number: str | None = None
     issued_by: str | None = None
@@ -75,7 +76,7 @@ class CompanyOut(CompanyCreate):
 
 
 # ── Bank Account ──────────────────────────────────────────────────────
-_BANK_CODE_RE = re.compile(r"^[a-zA-Zа-яА-ЯёЁ0-9]+$")
+_BANK_CODE_RE = re.compile(r"^[a-zA-Z0-9]+$")
 
 
 class BankAccountCreate(BaseModel):
@@ -87,12 +88,12 @@ class BankAccountCreate(BaseModel):
 
     @field_validator("iban", "swift", "bic")
     @classmethod
-    def latin_cyrillic_digits_only(cls, v: str | None) -> str | None:
+    def latin_digits_only(cls, v: str | None) -> str | None:
         if v is None or v == "":
             return v
         if not _BANK_CODE_RE.fullmatch(v):
             raise ValueError(
-                "Поля IBAN, BIC и SWIFT: только латиница, кириллица и цифры, без пробелов"
+                "Поля IBAN, BIC и SWIFT: только латинские буквы и цифры, без пробелов"
             )
         return v
 

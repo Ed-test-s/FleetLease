@@ -79,6 +79,7 @@ class Individual(Base):
     issued_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    registration_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="individual")
 

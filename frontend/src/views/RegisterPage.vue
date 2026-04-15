@@ -73,6 +73,17 @@
               <label class="label">ФИО</label>
               <input v-model="individual.full_name" type="text" class="input-field" placeholder="Иванов Иван Иванович" required />
             </div>
+            <div class="sm:col-span-2">
+              <label class="label">Адрес прописки</label>
+              <input
+                v-model="individual.registration_address"
+                @blur="touched.registration_address = true"
+                type="text"
+                :class="['input-field', fieldError('registration_address') ? 'border-red-500 ring-1 ring-red-500' : '']"
+                placeholder="г. Минск, пр. Дзержинского, д. 127, кв. 123"
+              />
+              <p v-if="fieldError('registration_address')" class="text-xs text-red-500 mt-1">{{ fieldError('registration_address') }}</p>
+            </div>
             <div>
               <label class="label">Идентификационный номер паспорта</label>
               <input v-model="individual.passport_id" type="text" class="input-field" placeholder="14 символов" maxlength="14" />
@@ -195,7 +206,15 @@ const legalForms = ['ООО', 'ОДО', 'ОАО', 'ЗАО', 'ПК', 'УП']
 const form = ref({ login: '', password: '', role: '', user_type: '' })
 const phone = ref('')
 const email = ref('')
-const individual = ref({ full_name: '', passport_id: '', passport_number: '', issued_by: '', issue_date: null, expiry_date: null })
+const individual = ref({
+  full_name: '',
+  registration_address: '',
+  passport_id: '',
+  passport_number: '',
+  issued_by: '',
+  issue_date: null,
+  expiry_date: null,
+})
 const entrepreneur = ref({ full_name: '', unp: '', legal_address: '', postal_address: '' })
 const company = ref({ company_name: '', legal_form: '', unp: '', okpo: '', legal_address: '', postal_address: '', director_name: '' })
 const error = ref('')
@@ -242,6 +261,11 @@ const validators = {
   okpo: () => {
     if (!company.value.okpo) return null
     if (!/^\d{12}$/.test(company.value.okpo)) return 'ОКПО: строго 12 цифр'
+    return null
+  },
+  registration_address: () => {
+    if (form.value.user_type !== 'individual') return null
+    if (!individual.value.registration_address?.trim()) return 'Укажите адрес прописки'
     return null
   },
 }

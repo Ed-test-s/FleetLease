@@ -85,11 +85,36 @@
         <details class="mt-4">
           <summary class="text-sm text-primary-500 cursor-pointer font-medium">Добавить счёт</summary>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <input v-model="newBankAccount.iban" class="input-field" placeholder="IBAN (28 символов)" />
-            <input v-model="newBankAccount.bank_name" class="input-field" placeholder="Название банка" />
+            <input
+              :value="newBankAccount.iban"
+              class="input-field"
+              placeholder="IBAN (28 символов)"
+              autocomplete="off"
+              spellcheck="false"
+              @input="onBankCodeInput('iban', $event)"
+            />
+            <input
+              v-model="newBankAccount.bank_name"
+              class="input-field"
+              placeholder='Название банка - например OAO "Белгазпромбанк"'
+            />
             <input v-model="newBankAccount.bank_address" class="input-field" placeholder="Адрес банка" />
-            <input v-model="newBankAccount.swift" class="input-field" placeholder="SWIFT" />
-            <input v-model="newBankAccount.bic" class="input-field" placeholder="BIC" />
+            <input
+              :value="newBankAccount.swift"
+              class="input-field"
+              placeholder="SWIFT"
+              autocomplete="off"
+              spellcheck="false"
+              @input="onBankCodeInput('swift', $event)"
+            />
+            <input
+              :value="newBankAccount.bic"
+              class="input-field"
+              placeholder="BIC"
+              autocomplete="off"
+              spellcheck="false"
+              @input="onBankCodeInput('bic', $event)"
+            />
             <button @click="addBankAccount" class="btn-primary btn-sm">Добавить счёт</button>
           </div>
         </details>
@@ -191,7 +216,15 @@ async function deleteContact(id) {
   await auth.fetchUser()
 }
 
-const bankCodeRe = /^[a-zA-Zа-яА-ЯёЁ0-9]+$/
+const bankLatinDigitsRe = /^[a-zA-Z0-9]+$/
+
+function sanitizeBankLatinDigits(raw) {
+  return String(raw ?? '').replace(/[^a-zA-Z0-9]/g, '')
+}
+
+function onBankCodeInput(field, e) {
+  newBankAccount.value[field] = sanitizeBankLatinDigits(e.target.value)
+}
 
 async function addBankAccount() {
   const { iban, swift, bic } = newBankAccount.value
@@ -200,9 +233,9 @@ async function addBankAccount() {
     ['SWIFT', swift],
     ['BIC', bic],
   ]) {
-    if (val && !bankCodeRe.test(val)) {
+    if (val && !bankLatinDigitsRe.test(val)) {
       notifStore.showToast(
-        `${label}, BIC, SWIFT: только латиница, кириллица и цифры, без пробелов`,
+        `${label}, SWIFT, BIC: только латинские буквы и цифры, без пробелов`,
         'error',
       )
       return
