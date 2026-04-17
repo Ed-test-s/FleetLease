@@ -858,7 +858,7 @@ async def generate_documents(
             url = upload_contract_document(buf, f"contracts/psa/{contract.id}", "contract.docx")
             contract.psa_doc_url = url
         elif contract.contract_type == ContractType.LEASE:
-            buf = generate_la_document(contract, vehicle, lessor_user, lessee_user)
+            buf = generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_user)
             url = upload_contract_document(buf, f"contracts/la/{contract.id}", "contract.docx")
             contract.la_doc_url = url
     except FileNotFoundError:
