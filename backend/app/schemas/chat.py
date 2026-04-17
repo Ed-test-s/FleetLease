@@ -42,9 +42,11 @@ class ChatOut(BaseModel):
     id: int
     chat_type: ChatType
     request_id: int | None = None
+    supplier_request_id: int | None = None
     contract_id: int | None = None
     created_at: datetime
     participants: list[ChatParticipantOut] = []
     last_message: MessageOut | None = None
     partner: ChatPartnerOut | None = None
+    vehicle_name: str | None = None
     model_config = {"from_attributes": True}

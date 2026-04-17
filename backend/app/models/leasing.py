@@ -2,6 +2,7 @@ import enum
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum,
@@ -22,6 +23,18 @@ class RequestStatus(str, enum.Enum):
     IN_REVIEW = "in_review"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class SupplierRequestStatus(str, enum.Enum):
+    NEW = "new"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ContractType(str, enum.Enum):
+    LEASE = "lease"
+    PURCHASE_SALE = "purchase_sale"
 
 
 class ContractStatus(str, enum.Enum):
@@ -67,16 +80,41 @@ class LeaseRequest(Base):
     vehicle: Mapped["Vehicle"] = relationship("Vehicle")
 
 
+class SupplierRequest(Base):
+    """Заявка лизингодателя поставщику на покупку техники."""
+    __tablename__ = "supplier_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lease_request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), nullable=False)
+    lessor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[SupplierRequestStatus] = mapped_column(
+        Enum(SupplierRequestStatus), default=SupplierRequestStatus.NEW
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    lease_request: Mapped["LeaseRequest"] = relationship("LeaseRequest")
+    lessor: Mapped["User"] = relationship("User", foreign_keys=[lessor_id])
+    supplier: Mapped["User"] = relationship("User", foreign_keys=[supplier_id])
+    vehicle: Mapped["Vehicle"] = relationship("Vehicle")
+
+
 class Contract(Base):
     __tablename__ = "contracts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), nullable=False)
-    lessee_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"), nullable=True)
+    supplier_request_id: Mapped[int | None] = mapped_column(ForeignKey("supplier_requests.id"), nullable=True)
+    lessee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     lessor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     supplier_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
 
+    contract_type: Mapped[ContractType] = mapped_column(
+        Enum(ContractType), default=ContractType.LEASE
+    )
     contract_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -85,11 +123,28 @@ class Contract(Base):
     prepayment: Mapped[float] = mapped_column(Float, nullable=False)
     interest_rate: Mapped[float] = mapped_column(Float, nullable=False)
 
+    signing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    signing_city: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    vat_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tech_passport_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tech_passport_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+
+    lessee_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    lessor_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    supplier_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    all_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    psa_doc_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    la_doc_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     status: Mapped[ContractStatus] = mapped_column(Enum(ContractStatus), default=ContractStatus.DRAFT)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    request: Mapped["LeaseRequest"] = relationship("LeaseRequest")
-    lessee: Mapped["User"] = relationship("User", foreign_keys=[lessee_id])
+    request: Mapped["LeaseRequest | None"] = relationship("LeaseRequest")
+    supplier_request: Mapped["SupplierRequest | None"] = relationship("SupplierRequest")
+    lessee: Mapped["User | None"] = relationship("User", foreign_keys=[lessee_id])
     lessor: Mapped["User"] = relationship("User", foreign_keys=[lessor_id])
     supplier: Mapped["User | None"] = relationship("User", foreign_keys=[supplier_id])
     vehicle: Mapped["Vehicle"] = relationship("Vehicle")

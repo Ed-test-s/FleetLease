@@ -7,8 +7,10 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.chat import Chat, ChatParticipant, Message
+from app.models.leasing import LeaseRequest, SupplierRequest
 from app.models.notification import Notification
 from app.models.user import User
+from app.models.vehicle import Vehicle
 from app.schemas.chat import ChatCreate, ChatOut, ChatPartnerOut, MessageCreate, MessageOut
 from app.services.storage import storage_service
 from app.services.user_display import user_display_name
@@ -27,22 +29,35 @@ async def _chat_out_with_partner(
     other_ids = [p.user_id for p in chat.participants if p.user_id != current_user_id]
     if not other_ids:
         co.partner = None
-        return co
-    ures = await db.execute(
-        select(User)
-        .options(
-            selectinload(User.individual),
-            selectinload(User.entrepreneur),
-            selectinload(User.company),
-        )
-        .where(User.id == other_ids[0])
-    )
-    pu = ures.scalar_one_or_none()
-    if pu:
-        name = user_display_name(pu) or pu.login
-        co.partner = ChatPartnerOut(id=pu.id, display_name=name, avatar_url=pu.avatar_url)
     else:
-        co.partner = None
+        ures = await db.execute(
+            select(User)
+            .options(
+                selectinload(User.individual),
+                selectinload(User.entrepreneur),
+                selectinload(User.company),
+            )
+            .where(User.id == other_ids[0])
+        )
+        pu = ures.scalar_one_or_none()
+        if pu:
+            name = user_display_name(pu) or pu.login
+            co.partner = ChatPartnerOut(id=pu.id, display_name=name, avatar_url=pu.avatar_url)
+        else:
+            co.partner = None
+
+    vehicle_id = None
+    if chat.request_id:
+        lr_res = await db.execute(select(LeaseRequest.vehicle_id).where(LeaseRequest.id == chat.request_id))
+        vehicle_id = lr_res.scalar_one_or_none()
+    elif chat.supplier_request_id:
+        sr_res = await db.execute(select(SupplierRequest.vehicle_id).where(SupplierRequest.id == chat.supplier_request_id))
+        vehicle_id = sr_res.scalar_one_or_none()
+
+    if vehicle_id:
+        vres = await db.execute(select(Vehicle.name).where(Vehicle.id == vehicle_id))
+        co.vehicle_name = vres.scalar_one_or_none()
+
     return co
 
 

@@ -19,6 +19,7 @@ class Chat(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     chat_type: Mapped[ChatType] = mapped_column(Enum(ChatType), nullable=False)
     request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"), nullable=True)
+    supplier_request_id: Mapped[int | None] = mapped_column(ForeignKey("supplier_requests.id"), nullable=True)
     contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

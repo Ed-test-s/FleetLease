@@ -1,3 +1,4 @@
+import time
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +12,7 @@ from app.models.chat import Chat, ChatParticipant, ChatType
 from app.models.leasing import (
     Contract,
     ContractStatus,
+    ContractType,
     LeaseRequest,
     Payment,
     PaymentSchedule,
@@ -18,16 +20,25 @@ from app.models.leasing import (
     PaymentStatus,
     PurchaseContract,
     RequestStatus,
+    SupplierRequest,
+    SupplierRequestStatus,
 )
 from app.models.notification import Notification
 from app.models.user import LeaseTerm, User, UserRole
 from app.models.vehicle import Vehicle
+from app.services.contract_document import (
+    generate_la_document,
+    generate_psa_document,
+    upload_contract_document,
+)
 from app.services.settings_service import get_vat_rate_percent
 from app.services.user_display import user_display_name
 from app.schemas.leasing import (
     CalculatorRequest,
     CalculatorResponse,
+    ContractConfirmation,
     ContractCreate,
+    ContractFieldsUpdate,
     ContractOut,
     ContractStatusUpdate,
     LeaseRequestCreate,
@@ -35,13 +46,32 @@ from app.schemas.leasing import (
     LeaseRequestStatusUpdate,
     PaymentCreate,
     PaymentOut,
-    PaymentScheduleCreate,
     PaymentScheduleOut,
     PurchaseContractCreate,
     PurchaseContractOut,
+    SupplierRequestCreate,
+    SupplierRequestOut,
+    SupplierRequestStatusUpdate,
 )
 
 router = APIRouter(prefix="/leasing", tags=["leasing"])
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+async def _load_users_map(db: AsyncSession, user_ids: set[int]) -> dict[int, User]:
+    if not user_ids:
+        return {}
+    ures = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.individual),
+            selectinload(User.entrepreneur),
+            selectinload(User.company),
+        )
+        .where(User.id.in_(user_ids))
+    )
+    return {u.id: u for u in ures.scalars().unique().all()}
 
 
 async def _lease_requests_out_batch(
@@ -53,16 +83,7 @@ async def _lease_requests_out_batch(
     u_ids = {r.user_id for r in reqs} | {r.lease_company_id for r in reqs}
     vres = await db.execute(select(Vehicle.id, Vehicle.name).where(Vehicle.id.in_(v_ids)))
     vmap = {row[0]: row[1] for row in vres.all()}
-    ures = await db.execute(
-        select(User)
-        .options(
-            selectinload(User.individual),
-            selectinload(User.entrepreneur),
-            selectinload(User.company),
-        )
-        .where(User.id.in_(u_ids))
-    )
-    umap = {u.id: u for u in ures.scalars().unique().all()}
+    umap = await _load_users_map(db, u_ids)
     out: list[LeaseRequestOut] = []
     for req in reqs:
         lo = LeaseRequestOut.model_validate(req)
@@ -80,10 +101,60 @@ async def _lease_requests_out_batch(
     return out
 
 
+async def _supplier_requests_out_batch(
+    db: AsyncSession, reqs: list[SupplierRequest]
+) -> list[SupplierRequestOut]:
+    if not reqs:
+        return []
+    v_ids = {r.vehicle_id for r in reqs}
+    u_ids = {r.lessor_id for r in reqs} | {r.supplier_id for r in reqs}
+    vres = await db.execute(select(Vehicle.id, Vehicle.name).where(Vehicle.id.in_(v_ids)))
+    vmap = {row[0]: row[1] for row in vres.all()}
+    umap = await _load_users_map(db, u_ids)
+    out: list[SupplierRequestOut] = []
+    for req in reqs:
+        so = SupplierRequestOut.model_validate(req)
+        out.append(
+            so.model_copy(
+                update={
+                    "vehicle_name": vmap.get(req.vehicle_id),
+                    "lessor_label": user_display_name(umap.get(req.lessor_id)),
+                    "supplier_label": user_display_name(umap.get(req.supplier_id)),
+                }
+            )
+        )
+    return out
+
+
+async def _contract_out(db: AsyncSession, contract: Contract) -> ContractOut:
+    co = ContractOut.model_validate(contract)
+    u_ids: set[int] = {contract.lessor_id}
+    if contract.lessee_id:
+        u_ids.add(contract.lessee_id)
+    if contract.supplier_id:
+        u_ids.add(contract.supplier_id)
+    umap = await _load_users_map(db, u_ids)
+
+    vres = await db.execute(select(Vehicle.name).where(Vehicle.id == contract.vehicle_id))
+    vname = vres.scalar_one_or_none()
+
+    return co.model_copy(
+        update={
+            "vehicle_name": vname,
+            "lessee_label": user_display_name(umap.get(contract.lessee_id)) if contract.lessee_id else None,
+            "lessor_label": user_display_name(umap.get(contract.lessor_id)),
+            "supplier_label": user_display_name(umap.get(contract.supplier_id)) if contract.supplier_id else None,
+        }
+    )
+
+
+def _gen_contract_number(prefix: str = "FL") -> str:
+    return f"{prefix}-{time.time_ns() // 1_000_000:X}"
+
+
 # ── Calculator ────────────────────────────────────────────────────────
 @router.post("/calculator", response_model=CalculatorResponse)
 async def calculate_leasing(data: CalculatorRequest):
-    """Аннуитетный расчёт лизинга."""
     principal = data.asset_price - data.prepayment
     if principal <= 0:
         raise HTTPException(status_code=400, detail="Prepayment exceeds asset price")
@@ -104,7 +175,7 @@ async def calculate_leasing(data: CalculatorRequest):
     )
 
 
-# ── Requests ──────────────────────────────────────────────────────────
+# ── Lease Requests (лизингополучатель -> лизингодатель) ───────────────
 @router.post("/requests", response_model=LeaseRequestOut, status_code=201)
 async def create_request(
     data: LeaseRequestCreate,
@@ -171,7 +242,7 @@ async def list_requests(
     elif user.role == UserRole.LEASE_MANAGER:
         q = q.where(LeaseRequest.lease_company_id == user.id)
     elif user.role == UserRole.ADMIN:
-        pass  # all requests
+        pass
     else:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -217,18 +288,211 @@ async def update_request_status(
     req.status = data.status
     await db.flush()
 
-    status_labels = {
-        RequestStatus.IN_REVIEW: "взята в работу",
-        RequestStatus.APPROVED: "одобрена",
-        RequestStatus.REJECTED: "отклонена",
-    }
-    db.add(Notification(
-        user_id=req.user_id,
-        title="Статус заявки обновлён",
-        text=f"Ваша заявка #{req.id} {status_labels.get(data.status, 'обновлена')}.",
-    ))
+    if data.status == RequestStatus.APPROVED:
+        vehicle = await db.get(Vehicle, req.vehicle_id)
+        lt_res = await db.execute(select(LeaseTerm).where(LeaseTerm.user_id == req.lease_company_id))
+        lt = lt_res.scalar_one_or_none()
+        interest_rate = lt.interest_rate if lt else 12.0
+        price = vehicle.price if vehicle else 0
+        total_amount = round(price * (1 + interest_rate / 100.0), 2)
+
+        contract = Contract(
+            request_id=req.id,
+            lessee_id=req.user_id,
+            lessor_id=req.lease_company_id,
+            supplier_id=vehicle.supplier_id if vehicle else None,
+            vehicle_id=req.vehicle_id,
+            contract_type=ContractType.LEASE,
+            contract_number=_gen_contract_number("LA"),
+            total_amount=total_amount,
+            prepayment=req.prepayment,
+            interest_rate=interest_rate,
+            quantity=1,
+        )
+        db.add(contract)
+        await db.flush()
+
+        chat_res = await db.execute(
+            select(Chat).where(Chat.request_id == req.id, Chat.chat_type == ChatType.REQUEST)
+        )
+        chat = chat_res.scalar_one_or_none()
+        if chat:
+            chat.contract_id = contract.id
+
+        db.add(Notification(
+            user_id=req.user_id,
+            title="Заявка одобрена",
+            text=f"Ваша заявка #{req.id} одобрена. Сформирован договор лизинга #{contract.contract_number}.",
+        ))
+    else:
+        status_labels = {
+            RequestStatus.IN_REVIEW: "взята в работу",
+            RequestStatus.REJECTED: "отклонена",
+        }
+        db.add(Notification(
+            user_id=req.user_id,
+            title="Статус заявки обновлён",
+            text=f"Ваша заявка #{req.id} {status_labels.get(data.status, 'обновлена')}.",
+        ))
+
     await db.flush()
     enriched = await _lease_requests_out_batch(db, [req])
+    return enriched[0]
+
+
+# ── Supplier Requests (лизингодатель -> поставщик) ────────────────────
+@router.post("/supplier-requests", response_model=SupplierRequestOut, status_code=201)
+async def create_supplier_request(
+    data: SupplierRequestCreate,
+    user: User = Depends(require_role(UserRole.LEASE_MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    vehicle = await db.get(Vehicle, data.vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    lease_req = await db.get(LeaseRequest, data.lease_request_id)
+    if not lease_req:
+        raise HTTPException(status_code=404, detail="Lease request not found")
+
+    sr = SupplierRequest(
+        lease_request_id=data.lease_request_id,
+        lessor_id=user.id,
+        supplier_id=vehicle.supplier_id,
+        vehicle_id=data.vehicle_id,
+        quantity=data.quantity,
+    )
+    db.add(sr)
+    await db.flush()
+
+    chat = Chat(chat_type=ChatType.SUPPLIER, supplier_request_id=sr.id)
+    db.add(chat)
+    await db.flush()
+    db.add(ChatParticipant(chat_id=chat.id, user_id=user.id))
+    db.add(ChatParticipant(chat_id=chat.id, user_id=vehicle.supplier_id))
+
+    db.add(Notification(
+        user_id=vehicle.supplier_id,
+        title="Новая заявка на покупку техники",
+        text=f"Лизинговая компания хочет приобрести технику (заявка #{sr.id}).",
+    ))
+
+    await db.flush()
+    enriched = await _supplier_requests_out_batch(db, [sr])
+    return enriched[0]
+
+
+@router.get("/supplier-requests", response_model=list[SupplierRequestOut])
+async def list_supplier_requests(
+    status: SupplierRequestStatus | None = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    q = select(SupplierRequest)
+    if user.role == UserRole.SUPPLIER:
+        q = q.where(SupplierRequest.supplier_id == user.id)
+    elif user.role == UserRole.LEASE_MANAGER:
+        q = q.where(SupplierRequest.lessor_id == user.id)
+    elif user.role == UserRole.ADMIN:
+        pass
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if status:
+        q = q.where(SupplierRequest.status == status)
+    q = q.order_by(SupplierRequest.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(q)
+    rows = result.scalars().all()
+    return await _supplier_requests_out_batch(db, list(rows))
+
+
+@router.get("/supplier-requests/{sr_id}", response_model=SupplierRequestOut)
+async def get_supplier_request(
+    sr_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(SupplierRequest).where(SupplierRequest.id == sr_id))
+    sr = result.scalar_one_or_none()
+    if not sr:
+        raise HTTPException(status_code=404, detail="Supplier request not found")
+    if user.role == UserRole.SUPPLIER and sr.supplier_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if user.role == UserRole.LEASE_MANAGER and sr.lessor_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    enriched = await _supplier_requests_out_batch(db, [sr])
+    return enriched[0]
+
+
+@router.patch("/supplier-requests/{sr_id}/status", response_model=SupplierRequestOut)
+async def update_supplier_request_status(
+    sr_id: int,
+    data: SupplierRequestStatusUpdate,
+    user: User = Depends(require_role(UserRole.SUPPLIER, UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(SupplierRequest)
+        .options(selectinload(SupplierRequest.lease_request))
+        .where(SupplierRequest.id == sr_id)
+    )
+    sr = result.scalar_one_or_none()
+    if not sr:
+        raise HTTPException(status_code=404, detail="Supplier request not found")
+    if user.role == UserRole.SUPPLIER and sr.supplier_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    sr.status = data.status
+    await db.flush()
+
+    if data.status == SupplierRequestStatus.APPROVED:
+        vehicle = await db.get(Vehicle, sr.vehicle_id)
+        price = vehicle.price if vehicle else 0
+
+        psa_contract = Contract(
+            supplier_request_id=sr.id,
+            request_id=sr.lease_request_id,
+            lessee_id=sr.lease_request.user_id if sr.lease_request else None,
+            lessor_id=sr.lessor_id,
+            supplier_id=sr.supplier_id,
+            vehicle_id=sr.vehicle_id,
+            contract_type=ContractType.PURCHASE_SALE,
+            contract_number=_gen_contract_number("PSA"),
+            total_amount=round(price * sr.quantity, 2),
+            prepayment=0,
+            interest_rate=0,
+            quantity=sr.quantity,
+        )
+        db.add(psa_contract)
+        await db.flush()
+
+        chat_res = await db.execute(
+            select(Chat).where(Chat.supplier_request_id == sr.id, Chat.chat_type == ChatType.SUPPLIER)
+        )
+        chat = chat_res.scalar_one_or_none()
+        if chat:
+            chat.contract_id = psa_contract.id
+
+        db.add(Notification(
+            user_id=sr.lessor_id,
+            title="Заявка на покупку одобрена",
+            text=f"Поставщик одобрил заявку #{sr.id}. Сформирован договор купли-продажи #{psa_contract.contract_number}.",
+        ))
+    else:
+        status_labels = {
+            SupplierRequestStatus.IN_REVIEW: "взята в работу",
+            SupplierRequestStatus.REJECTED: "отклонена",
+        }
+        db.add(Notification(
+            user_id=sr.lessor_id,
+            title="Статус заявки на покупку обновлён",
+            text=f"Заявка на покупку #{sr.id} {status_labels.get(data.status, 'обновлена')}.",
+        ))
+
+    await db.flush()
+    enriched = await _supplier_requests_out_batch(db, [sr])
     return enriched[0]
 
 
@@ -243,18 +507,20 @@ async def create_contract(
     db.add(contract)
     await db.flush()
 
-    db.add(Notification(
-        user_id=data.lessee_id,
-        title="Новый договор лизинга",
-        text=f"Сформирован договор #{data.contract_number}.",
-    ))
+    if data.lessee_id:
+        db.add(Notification(
+            user_id=data.lessee_id,
+            title="Новый договор",
+            text=f"Сформирован договор #{data.contract_number}.",
+        ))
     await db.flush()
-    return contract
+    return await _contract_out(db, contract)
 
 
 @router.get("/contracts", response_model=list[ContractOut])
 async def list_contracts(
     status: ContractStatus | None = None,
+    contract_type: ContractType | None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -269,9 +535,15 @@ async def list_contracts(
         q = q.where(Contract.supplier_id == user.id)
     if status:
         q = q.where(Contract.status == status)
+    if contract_type:
+        q = q.where(Contract.contract_type == contract_type)
     q = q.order_by(Contract.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(q)
-    return result.scalars().all()
+    contracts = result.scalars().all()
+    out = []
+    for c in contracts:
+        out.append(await _contract_out(db, c))
+    return out
 
 
 @router.get("/contracts/{contract_id}", response_model=ContractOut)
@@ -284,7 +556,7 @@ async def get_contract(
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
-    return contract
+    return await _contract_out(db, contract)
 
 
 @router.patch("/contracts/{contract_id}/status", response_model=ContractOut)
@@ -301,13 +573,110 @@ async def update_contract_status(
     contract.status = data.status
     await db.flush()
 
-    db.add(Notification(
-        user_id=contract.lessee_id,
-        title="Статус договора обновлён",
-        text=f"Договор #{contract.contract_number} получил статус: {data.status.value}.",
-    ))
+    notify_ids: set[int] = set()
+    if contract.lessee_id:
+        notify_ids.add(contract.lessee_id)
+    if contract.supplier_id:
+        notify_ids.add(contract.supplier_id)
+    notify_ids.discard(user.id)
+    for uid in notify_ids:
+        db.add(Notification(
+            user_id=uid,
+            title="Статус договора обновлён",
+            text=f"Договор #{contract.contract_number} получил статус: {data.status.value}.",
+        ))
     await db.flush()
-    return contract
+    return await _contract_out(db, contract)
+
+
+@router.patch("/contracts/{contract_id}/fields", response_model=ContractOut)
+async def update_contract_fields(
+    contract_id: int,
+    data: ContractFieldsUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if contract.all_confirmed:
+        raise HTTPException(status_code=400, detail="Все стороны уже подтвердили данные. Редактирование невозможно.")
+
+    is_lessor = user.role in (UserRole.LEASE_MANAGER, UserRole.ADMIN) and contract.lessor_id == user.id
+    is_supplier = user.role == UserRole.SUPPLIER and contract.supplier_id == user.id
+
+    if is_lessor:
+        if data.signing_date is not None:
+            contract.signing_date = data.signing_date
+        if data.signing_city is not None:
+            contract.signing_city = data.signing_city
+        if data.currency is not None:
+            contract.currency = data.currency
+    elif is_supplier:
+        if data.tech_passport_number is not None:
+            contract.tech_passport_number = data.tech_passport_number
+        if data.tech_passport_date is not None:
+            contract.tech_passport_date = data.tech_passport_date
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    contract.lessee_confirmed = False
+    contract.lessor_confirmed = False
+    contract.supplier_confirmed = False
+    contract.all_confirmed = False
+
+    await db.flush()
+    return await _contract_out(db, contract)
+
+
+@router.post("/contracts/{contract_id}/confirm", response_model=ContractOut)
+async def confirm_contract(
+    contract_id: int,
+    data: ContractConfirmation,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if contract.all_confirmed:
+        raise HTTPException(status_code=400, detail="Все стороны уже подтвердили данные.")
+
+    if user.id == contract.lessor_id:
+        contract.lessor_confirmed = data.confirmed
+    elif user.id == contract.lessee_id:
+        contract.lessee_confirmed = data.confirmed
+    elif user.id == contract.supplier_id:
+        contract.supplier_confirmed = data.confirmed
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    need_lessee = contract.lessee_id is not None
+    need_supplier = contract.supplier_id is not None
+    all_ok = contract.lessor_confirmed
+    if need_lessee:
+        all_ok = all_ok and contract.lessee_confirmed
+    if need_supplier:
+        all_ok = all_ok and contract.supplier_confirmed
+
+    if all_ok:
+        contract.all_confirmed = True
+        vat_rate = await get_vat_rate_percent(db)
+        contract.vat_rate = vat_rate
+
+        if contract.signing_date and contract.request_id:
+            lease_req_res = await db.execute(
+                select(LeaseRequest).where(LeaseRequest.id == contract.request_id)
+            )
+            lease_req = lease_req_res.scalar_one_or_none()
+            if lease_req:
+                contract.start_date = contract.signing_date
+                contract.end_date = contract.signing_date + timedelta(days=30 * lease_req.lease_term)
+
+    await db.flush()
+    return await _contract_out(db, contract)
 
 
 # ── Payment Schedule ──────────────────────────────────────────────────
@@ -317,14 +686,21 @@ async def generate_schedule(
     user: User = Depends(require_role(UserRole.LEASE_MANAGER, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Автоматическая генерация графика платежей на основе данных договора."""
     result = await db.execute(select(Contract).where(Contract.id == contract_id))
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
 
+    existing = await db.execute(
+        select(PaymentSchedule).where(PaymentSchedule.contract_id == contract_id)
+    )
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="График платежей уже сформирован")
+
     req_result = await db.execute(select(LeaseRequest).where(LeaseRequest.id == contract.request_id))
-    req = req_result.scalar_one()
+    req = req_result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=400, detail="Связанная заявка не найдена")
 
     principal = contract.total_amount - contract.prepayment
     monthly_rate = contract.interest_rate / 100.0 / 12.0
@@ -335,9 +711,9 @@ async def generate_schedule(
     else:
         annuity = principal / n
 
-    start = contract.start_date or date.today()
+    start = contract.start_date or contract.signing_date or date.today()
     remaining = principal
-    vat_rate = await get_vat_rate_percent(db)
+    vat_rate = contract.vat_rate or await get_vat_rate_percent(db)
     vat_fraction = vat_rate / 100.0
     items = []
 
@@ -406,7 +782,97 @@ async def make_payment(
     return payment
 
 
-# ── Purchase Contracts ────────────────────────────────────────────────
+# ── Document Generation ──────────────────────────────────────────────
+@router.post("/contracts/{contract_id}/generate-documents", response_model=ContractOut)
+async def generate_documents(
+    contract_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Contract).where(Contract.id == contract_id)
+    )
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if not contract.all_confirmed:
+        raise HTTPException(status_code=400, detail="Все стороны должны подтвердить данные перед генерацией документов")
+
+    vehicle = await db.get(Vehicle, contract.vehicle_id)
+
+    lessor = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.company),
+            selectinload(User.individual),
+            selectinload(User.entrepreneur),
+            selectinload(User.bank_accounts),
+            selectinload(User.contacts),
+        )
+        .where(User.id == contract.lessor_id)
+    )
+    lessor_user = lessor.scalar_one_or_none()
+
+    lessee_user = None
+    if contract.lessee_id:
+        lessee = await db.execute(
+            select(User)
+            .options(
+                selectinload(User.company),
+                selectinload(User.individual),
+                selectinload(User.entrepreneur),
+                selectinload(User.bank_accounts),
+                selectinload(User.contacts),
+            )
+            .where(User.id == contract.lessee_id)
+        )
+        lessee_user = lessee.scalar_one_or_none()
+
+    supplier_user = None
+    if contract.supplier_id:
+        supplier = await db.execute(
+            select(User)
+            .options(
+                selectinload(User.company),
+                selectinload(User.individual),
+                selectinload(User.entrepreneur),
+                selectinload(User.bank_accounts),
+                selectinload(User.contacts),
+            )
+            .where(User.id == contract.supplier_id)
+        )
+        supplier_user = supplier.scalar_one_or_none()
+
+    if contract.contract_type == ContractType.PURCHASE_SALE:
+        buf = generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user)
+        url = upload_contract_document(buf, f"contracts/psa/{contract.id}", "contract.docx")
+        contract.psa_doc_url = url
+    elif contract.contract_type == ContractType.LEASE:
+        buf = generate_la_document(contract, vehicle, lessor_user, lessee_user)
+        url = upload_contract_document(buf, f"contracts/la/{contract.id}", "contract.docx")
+        contract.la_doc_url = url
+
+    await db.flush()
+    return await _contract_out(db, contract)
+
+
+@router.get("/contracts/{contract_id}/documents")
+async def get_contract_documents(
+    contract_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    return {
+        "psa_doc_url": contract.psa_doc_url,
+        "la_doc_url": contract.la_doc_url,
+    }
+
+
+# ── Purchase Contracts (legacy) ──────────────────────────────────────
 @router.post("/purchase-contracts", response_model=PurchaseContractOut, status_code=201)
 async def create_purchase_contract(
     data: PurchaseContractCreate,
@@ -426,7 +892,7 @@ async def create_purchase_contract(
     db.add(Notification(
         user_id=data.supplier_id,
         title="Запрос на покупку техники",
-        text=f"Лизинговая компания хочет приобрести технику. Проверьте чат.",
+        text="Лизинговая компания хочет приобрести технику. Проверьте чат.",
     ))
     await db.flush()
     return pc

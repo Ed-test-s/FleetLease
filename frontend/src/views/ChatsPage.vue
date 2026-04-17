@@ -28,6 +28,7 @@
               {{ c.chat_type === 'request' ? 'Заявка' : 'Поставщик' }}
             </span>
           </div>
+          <p v-if="c.vehicle_name" class="text-xs text-primary-500 truncate mt-0.5">Предмет: {{ c.vehicle_name }}</p>
           <p v-if="c.last_message" class="text-xs text-gray-500 truncate mt-0.5">{{ c.last_message.message_text }}</p>
           <p v-else class="text-xs text-gray-400 mt-0.5">Нет сообщений</p>
         </div>

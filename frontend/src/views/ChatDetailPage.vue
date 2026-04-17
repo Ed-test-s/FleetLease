@@ -11,7 +11,8 @@
         </div>
         <div class="min-w-0">
           <h1 class="text-lg font-bold text-gray-900 truncate">{{ chat.partner.display_name }}</h1>
-          <p class="text-xs text-gray-500">Чат #{{ route.params.id }}</p>
+          <p v-if="chat.vehicle_name" class="text-xs text-primary-500">Предмет: {{ chat.vehicle_name }}</p>
+          <p v-else class="text-xs text-gray-500">Чат #{{ route.params.id }}</p>
         </div>
       </div>
       <h1 v-else class="text-lg font-bold text-gray-900">Чат #{{ route.params.id }}</h1>
@@ -19,9 +20,8 @@
         {{ chat?.chat_type === 'request' ? 'Заявка' : 'Поставщик' }}
       </span>
 
-      <!-- Link to contract if exists -->
       <router-link v-if="chat?.contract_id" :to="`/contracts/${chat.contract_id}`" class="ml-auto btn-secondary btn-sm">
-        Приложения к договору
+        Перейти к договору
       </router-link>
     </div>
 

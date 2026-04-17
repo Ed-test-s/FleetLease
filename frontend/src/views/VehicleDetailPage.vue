@@ -48,6 +48,10 @@
                     @click="showLessorModal = true" class="btn-primary w-full mt-6">
               Подать заявку на лизинг
             </button>
+            <button v-else-if="auth.isAuthenticated && auth.userRole === 'lease_manager'"
+                    @click="showPurchaseModal = true" class="btn-primary w-full mt-6">
+              Заявка на покупку
+            </button>
             <router-link v-else-if="!auth.isAuthenticated" to="/login" class="btn-primary w-full mt-6 text-center">
               Войдите для подачи заявки
             </router-link>
@@ -232,6 +236,35 @@
           </form>
         </div>
       </div>
+      <!-- Purchase Request Modal (for lease_manager) -->
+      <div v-if="showPurchaseModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showPurchaseModal = false">
+        <div class="bg-white rounded-2xl w-full max-w-md m-4 p-6">
+          <h2 class="text-lg font-bold text-gray-900 mb-4">Заявка на покупку техники</h2>
+          <p class="text-sm text-gray-500 mb-4">Техника: <span class="font-medium text-gray-800">{{ vehicle.name }}</span></p>
+          <form @submit.prevent="submitPurchaseRequest" class="space-y-4">
+            <div>
+              <label class="label">Связанная заявка на лизинг (ID)</label>
+              <select v-model.number="purchaseForm.lease_request_id" class="input-field" required>
+                <option value="" disabled>Выберите заявку</option>
+                <option v-for="lr in myLeaseRequests" :key="lr.id" :value="lr.id">
+                  Заявка #{{ lr.id }} — {{ lr.vehicle_name || `Объявление #${lr.vehicle_id}` }}
+                </option>
+              </select>
+              <p class="text-xs text-gray-400 mt-1">Выберите заявку лизингополучателя, в рамках которой покупается техника</p>
+            </div>
+            <div>
+              <label class="label">Количество (шт.)</label>
+              <input v-model.number="purchaseForm.quantity" type="number" class="input-field" min="1" required />
+            </div>
+            <div class="flex gap-3">
+              <button type="button" @click="showPurchaseModal = false" class="btn-secondary flex-1">Отмена</button>
+              <button type="submit" :disabled="purchaseLoading" class="btn-primary flex-1">
+                {{ purchaseLoading ? 'Отправка...' : 'Отправить заявку' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -272,6 +305,11 @@ const lessorSearch = ref('')
 const selectedLessor = ref(null)
 const requestForm = ref({ lease_term: 24, prepayment: 0, comment: '' })
 const requestLoading = ref(false)
+
+const showPurchaseModal = ref(false)
+const purchaseForm = ref({ lease_request_id: '', quantity: 1 })
+const purchaseLoading = ref(false)
+const myLeaseRequests = ref([])
 
 const priceUsd = computed(() => {
   const price = vehicle.value?.price
@@ -355,6 +393,15 @@ onMounted(async () => {
   }
 })
 
+watch(showPurchaseModal, async (val) => {
+  if (val && myLeaseRequests.value.length === 0) {
+    try {
+      const { data } = await leasingApi.listRequests({ status: 'in_review', limit: 100 })
+      myLeaseRequests.value = data
+    } catch {}
+  }
+})
+
 watch(showLessorModal, async (val) => {
   if (val && lessors.value.length === 0) {
     lessorsLoading.value = true
@@ -373,6 +420,23 @@ function selectLessor(l) {
   initRequestForm()
   showLessorModal.value = false
   showRequestModal.value = true
+}
+
+async function submitPurchaseRequest() {
+  purchaseLoading.value = true
+  try {
+    await leasingApi.createSupplierRequest({
+      lease_request_id: purchaseForm.value.lease_request_id,
+      vehicle_id: vehicle.value.id,
+      quantity: purchaseForm.value.quantity,
+    })
+    showPurchaseModal.value = false
+    notifStore.showToast('Заявка на покупку отправлена поставщику!', 'success')
+  } catch (e) {
+    notifStore.showToast(e.response?.data?.detail || 'Ошибка', 'error')
+  } finally {
+    purchaseLoading.value = false
+  }
 }
 
 async function submitRequest() {

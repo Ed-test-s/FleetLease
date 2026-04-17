@@ -51,3 +51,5 @@ temp/
 
 # Docker (optional local overrides)
 docker-compose.override.yml
+contracts_examples/Договор_купли_продажи_от_03_12_2025.docx
+contracts_examples/договор_лизинга.docx

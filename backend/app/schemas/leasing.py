@@ -4,10 +4,12 @@ from pydantic import BaseModel
 
 from app.models.leasing import (
     ContractStatus,
+    ContractType,
     PaymentScheduleStatus,
     PaymentStatus,
     PurchaseContractStatus,
     RequestStatus,
+    SupplierRequestStatus,
 )
 
 
@@ -40,41 +42,101 @@ class LeaseRequestStatusUpdate(BaseModel):
     status: RequestStatus
 
 
+# ── Supplier Request ──────────────────────────────────────────────────
+class SupplierRequestCreate(BaseModel):
+    lease_request_id: int
+    vehicle_id: int
+    quantity: int = 1
+
+
+class SupplierRequestOut(BaseModel):
+    id: int
+    lease_request_id: int
+    lessor_id: int
+    supplier_id: int
+    vehicle_id: int
+    quantity: int
+    status: SupplierRequestStatus
+    created_at: datetime
+    vehicle_name: str | None = None
+    lessor_label: str | None = None
+    supplier_label: str | None = None
+    model_config = {"from_attributes": True}
+
+
+class SupplierRequestStatusUpdate(BaseModel):
+    status: SupplierRequestStatus
+
+
 # ── Contract ──────────────────────────────────────────────────────────
 class ContractCreate(BaseModel):
-    request_id: int
-    lessee_id: int
+    request_id: int | None = None
+    supplier_request_id: int | None = None
+    lessee_id: int | None = None
     lessor_id: int
     supplier_id: int | None = None
     vehicle_id: int
+    contract_type: ContractType = ContractType.LEASE
     contract_number: str
     start_date: date | None = None
     end_date: date | None = None
     total_amount: float
     prepayment: float
     interest_rate: float
+    quantity: int = 1
 
 
 class ContractOut(BaseModel):
     id: int
-    request_id: int
-    lessee_id: int
+    request_id: int | None = None
+    supplier_request_id: int | None = None
+    lessee_id: int | None = None
     lessor_id: int
     supplier_id: int | None = None
     vehicle_id: int
+    contract_type: ContractType
     contract_number: str
     start_date: date | None = None
     end_date: date | None = None
     total_amount: float
     prepayment: float
     interest_rate: float
+    signing_date: date | None = None
+    signing_city: str | None = None
+    currency: str | None = None
+    vat_rate: float | None = None
+    tech_passport_number: str | None = None
+    tech_passport_date: date | None = None
+    quantity: int = 1
+    lessee_confirmed: bool = False
+    lessor_confirmed: bool = False
+    supplier_confirmed: bool = False
+    all_confirmed: bool = False
+    psa_doc_url: str | None = None
+    la_doc_url: str | None = None
     status: ContractStatus
     created_at: datetime
+    vehicle_name: str | None = None
+    lessee_label: str | None = None
+    lessor_label: str | None = None
+    supplier_label: str | None = None
     model_config = {"from_attributes": True}
 
 
 class ContractStatusUpdate(BaseModel):
     status: ContractStatus
+
+
+class ContractFieldsUpdate(BaseModel):
+    signing_date: date | None = None
+    signing_city: str | None = None
+    currency: str | None = None
+    tech_passport_number: str | None = None
+    tech_passport_date: date | None = None
+
+
+class ContractConfirmation(BaseModel):
+    confirmed: bool
 
 
 # ── Payment Schedule ──────────────────────────────────────────────────
