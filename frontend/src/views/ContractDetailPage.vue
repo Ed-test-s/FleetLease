@@ -34,7 +34,7 @@
             <span class="text-gray-400 block">Лизингополучатель</span>
             <span class="font-semibold">{{ contract.lessee_label }}</span>
           </div>
-          <div v-if="contract.supplier_label">
+          <div v-if="contract.supplier_label && contract.contract_type === 'purchase_sale'">
             <span class="text-gray-400 block">Поставщик</span>
             <span class="font-semibold">{{ contract.supplier_label }}</span>
           </div>
@@ -43,8 +43,8 @@
         <!-- Financial info -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
           <div><span class="text-gray-400 block">Общая сумма</span><span class="font-semibold">{{ formatPrice(contract.total_amount) }}</span></div>
-          <div><span class="text-gray-400 block">Аванс</span><span class="font-semibold">{{ formatPrice(contract.prepayment) }}</span></div>
-          <div><span class="text-gray-400 block">Ставка</span><span class="font-semibold">{{ contract.interest_rate }}%</span></div>
+          <div v-if="contract.contract_type === 'lease'"><span class="text-gray-400 block">Аванс</span><span class="font-semibold">{{ formatPrice(contract.prepayment) }}</span></div>
+          <div v-if="contract.contract_type === 'lease'"><span class="text-gray-400 block">Ставка</span><span class="font-semibold">{{ contract.interest_rate }}%</span></div>
           <div><span class="text-gray-400 block">Кол-во техники</span><span class="font-semibold">{{ contract.quantity }} шт.</span></div>
         </div>
       </div>
@@ -93,7 +93,7 @@
             <label class="label">НДС</label>
             <p class="text-sm font-medium text-gray-800">{{ contract.vat_rate != null ? `${contract.vat_rate}%` : 'Будет установлен при подтверждении' }}</p>
           </div>
-          <div>
+          <div v-if="contract.contract_type === 'lease'">
             <label class="label">Период</label>
             <p class="text-sm font-medium text-gray-800">{{ formatDate(contract.start_date) }} — {{ formatDate(contract.end_date) }}</p>
           </div>
@@ -128,7 +128,7 @@
             </span>
             <span>Лизингополучатель: {{ contract.lessee_confirmed ? 'Подтвердил' : 'Ожидает' }}</span>
           </div>
-          <div v-if="contract.supplier_id" class="flex items-center gap-2">
+          <div v-if="contract.supplier_id && contract.contract_type === 'purchase_sale'" class="flex items-center gap-2">
             <span :class="contract.supplier_confirmed ? 'text-green-600' : 'text-gray-400'">
               {{ contract.supplier_confirmed ? '&#10003;' : '&#x25CB;' }}
             </span>
@@ -267,6 +267,7 @@ const canEditLessorFields = computed(() => {
 
 const canEditSupplierFields = computed(() => {
   if (!contract.value || contract.value.all_confirmed) return false
+  if (contract.value.contract_type !== 'purchase_sale') return false
   return auth.userRole === 'supplier' && contract.value.supplier_id === auth.user?.id
 })
 
@@ -275,7 +276,7 @@ const canConfirm = computed(() => {
   const uid = auth.user?.id
   if (uid === contract.value.lessor_id && !contract.value.lessor_confirmed) return true
   if (uid === contract.value.lessee_id && !contract.value.lessee_confirmed) return true
-  if (uid === contract.value.supplier_id && !contract.value.supplier_confirmed) return true
+  if (uid === contract.value.supplier_id && !contract.value.supplier_confirmed && contract.value.contract_type === 'purchase_sale') return true
   return false
 })
 

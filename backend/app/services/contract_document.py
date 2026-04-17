@@ -13,7 +13,7 @@ from docx.oxml.ns import qn
 from app.core.config import settings
 from app.services.storage import storage_service
 
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "contracts_examples"
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "contracts_examples"
 PSA_TEMPLATE = TEMPLATES_DIR / "шаблон_договор_купли_продажи.docx"
 LA_TEMPLATE = TEMPLATES_DIR / "шаблон_договор_лизинга.docx"
 

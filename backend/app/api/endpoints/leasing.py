@@ -464,6 +464,7 @@ async def update_supplier_request_status(
             prepayment=0,
             interest_rate=0,
             quantity=sr.quantity,
+            status=ContractStatus.ACTIVE,
         )
         db.add(psa_contract)
         await db.flush()
@@ -532,7 +533,7 @@ async def list_contracts(
     elif user.role == UserRole.LEASE_MANAGER:
         q = q.where(Contract.lessor_id == user.id)
     elif user.role == UserRole.SUPPLIER:
-        q = q.where(Contract.supplier_id == user.id)
+        q = q.where(Contract.supplier_id == user.id, Contract.contract_type == ContractType.PURCHASE_SALE)
     if status:
         q = q.where(Contract.status == status)
     if contract_type:
@@ -556,6 +557,8 @@ async def get_contract(
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if user.role == UserRole.SUPPLIER and contract.contract_type != ContractType.PURCHASE_SALE:
+        raise HTTPException(status_code=403, detail="Access denied")
     return await _contract_out(db, contract)
 
 
@@ -604,7 +607,11 @@ async def update_contract_fields(
         raise HTTPException(status_code=400, detail="Все стороны уже подтвердили данные. Редактирование невозможно.")
 
     is_lessor = user.role in (UserRole.LEASE_MANAGER, UserRole.ADMIN) and contract.lessor_id == user.id
-    is_supplier = user.role == UserRole.SUPPLIER and contract.supplier_id == user.id
+    is_supplier = (
+        user.role == UserRole.SUPPLIER
+        and contract.supplier_id == user.id
+        and contract.contract_type == ContractType.PURCHASE_SALE
+    )
 
     if is_lessor:
         if data.signing_date is not None:
@@ -644,17 +651,19 @@ async def confirm_contract(
     if contract.all_confirmed:
         raise HTTPException(status_code=400, detail="Все стороны уже подтвердили данные.")
 
+    is_lease = contract.contract_type == ContractType.LEASE
+
     if user.id == contract.lessor_id:
         contract.lessor_confirmed = data.confirmed
     elif user.id == contract.lessee_id:
         contract.lessee_confirmed = data.confirmed
-    elif user.id == contract.supplier_id:
+    elif user.id == contract.supplier_id and not is_lease:
         contract.supplier_confirmed = data.confirmed
     else:
         raise HTTPException(status_code=403, detail="Access denied")
 
     need_lessee = contract.lessee_id is not None
-    need_supplier = contract.supplier_id is not None
+    need_supplier = contract.supplier_id is not None and not is_lease
     all_ok = contract.lessor_confirmed
     if need_lessee:
         all_ok = all_ok and contract.lessee_confirmed
@@ -843,14 +852,19 @@ async def generate_documents(
         )
         supplier_user = supplier.scalar_one_or_none()
 
-    if contract.contract_type == ContractType.PURCHASE_SALE:
-        buf = generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user)
-        url = upload_contract_document(buf, f"contracts/psa/{contract.id}", "contract.docx")
-        contract.psa_doc_url = url
-    elif contract.contract_type == ContractType.LEASE:
-        buf = generate_la_document(contract, vehicle, lessor_user, lessee_user)
-        url = upload_contract_document(buf, f"contracts/la/{contract.id}", "contract.docx")
-        contract.la_doc_url = url
+    try:
+        if contract.contract_type == ContractType.PURCHASE_SALE:
+            buf = generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user)
+            url = upload_contract_document(buf, f"contracts/psa/{contract.id}", "contract.docx")
+            contract.psa_doc_url = url
+        elif contract.contract_type == ContractType.LEASE:
+            buf = generate_la_document(contract, vehicle, lessor_user, lessee_user)
+            url = upload_contract_document(buf, f"contracts/la/{contract.id}", "contract.docx")
+            contract.la_doc_url = url
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Шаблон документа не найден на сервере")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Ошибка при генерации документа: {exc}")
 
     await db.flush()
     return await _contract_out(db, contract)

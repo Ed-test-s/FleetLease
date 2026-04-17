@@ -39,13 +39,14 @@
           </div>
           <div class="text-sm text-gray-500 mt-1">
             <p v-if="c.vehicle_name">Техника: {{ c.vehicle_name }}</p>
-            <p>Сумма: {{ formatPrice(c.total_amount) }} · Аванс: {{ formatPrice(c.prepayment) }} · Ставка: {{ c.interest_rate }}%</p>
-            <p v-if="c.lessee_label || c.lessor_label || c.supplier_label" class="text-xs text-gray-400 mt-0.5">
-              <span v-if="c.lessee_label">Лизингополучатель: {{ c.lessee_label }}</span>
-              <span v-if="c.lessee_label && c.supplier_label"> · </span>
-              <span v-if="c.supplier_label">Поставщик: {{ c.supplier_label }}</span>
+            <p v-if="c.contract_type === 'lease'">Сумма: {{ formatPrice(c.total_amount) }} · Аванс: {{ formatPrice(c.prepayment) }} · Ставка: {{ c.interest_rate }}%</p>
+            <p v-else>Сумма: {{ formatPrice(c.total_amount) }}</p>
+            <p v-if="c.lessee_label || c.supplier_label" class="text-xs text-gray-400 mt-0.5">
+              <span v-if="c.contract_type === 'lease' && c.lessee_label">Лизингополучатель: {{ c.lessee_label }}</span>
+              <span v-if="c.contract_type === 'purchase_sale' && c.supplier_label">Поставщик: {{ c.supplier_label }}</span>
             </p>
-            <p class="text-xs text-gray-400">{{ formatDate(c.start_date) }} — {{ formatDate(c.end_date) }}</p>
+            <p v-if="c.contract_type === 'lease'" class="text-xs text-gray-400">{{ formatDate(c.start_date) }} — {{ formatDate(c.end_date) }}</p>
+            <p v-else-if="c.signing_date" class="text-xs text-gray-400">Дата подписания: {{ formatDate(c.signing_date) }}</p>
           </div>
         </div>
         <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
