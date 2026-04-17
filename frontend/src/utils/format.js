@@ -7,6 +7,16 @@ export function formatPrice(value) {
   }).format(value)
 }
 
+export function formatUsdAmount(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  return new Intl.NumberFormat('ru-BY', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 /** Краткий формат для подписей шкалы калькулятора (тыс. / млн BYN). */
 export function formatMoneyShortBYN(value) {
   if (value == null || Number.isNaN(Number(value))) return '—'

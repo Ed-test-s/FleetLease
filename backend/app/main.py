@@ -9,6 +9,7 @@ from app.core.database import engine, Base, async_session
 
 from app.models import user, vehicle, leasing, chat, notification, review  # noqa: F401
 from app.models import reference  # noqa: F401
+from app.models import app_settings  # noqa: F401
 
 
 @asynccontextmanager
@@ -16,10 +17,11 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    from app.services.seed import seed_admin, seed_reference_data
+    from app.services.seed import seed_admin, seed_app_settings, seed_reference_data
     async with async_session() as db:
         await seed_reference_data(db)
         await seed_admin(db)
+        await seed_app_settings(db)
 
     yield
 

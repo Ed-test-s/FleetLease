@@ -3,7 +3,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import hash_password
+from app.models.app_settings import AppSettings
 from app.models.reference import City, Colour, Region, VehicleBrand, VehicleModel
 from app.models.user import Individual, User, UserRole, UserType
 
@@ -68,6 +70,15 @@ async def seed_reference_data(db: AsyncSession):
             for city_name in cities:
                 db.add(City(region_id=region.id, name=city_name))
 
+    await db.commit()
+
+
+async def seed_app_settings(db: AsyncSession):
+    """Создаёт строку настроек с НДС по умолчанию из конфига, если её ещё нет."""
+    result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+    if result.scalar_one_or_none():
+        return
+    db.add(AppSettings(id=1, vat_rate_percent=settings.VAT_RATE_PERCENT))
     await db.commit()
 
 

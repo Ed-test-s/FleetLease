@@ -2,6 +2,28 @@
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
     <h1 class="text-2xl font-bold text-gray-900 mb-6">Админ-панель</h1>
 
+    <div class="card p-4 mb-6 max-w-md">
+      <h2 class="text-sm font-semibold text-gray-800 mb-3">Ставка НДС</h2>
+      <p class="text-xs text-gray-500 mb-3">Используется при автоматической генерации графика платежей по договору. На сайте для посетителей не отображается.</p>
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="label text-xs">Процент</label>
+          <input
+            v-model.number="vatPercent"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            class="input-field w-32"
+            :disabled="settingsLoading"
+          />
+        </div>
+        <button type="button" class="btn-primary" :disabled="settingsLoading || settingsSaving" @click="saveVat">
+          {{ settingsSaving ? 'Сохранение...' : 'Сохранить' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Filters -->
     <div class="flex flex-wrap gap-3 mb-6">
       <input v-model="search" @input="debouncedFetch" type="text" class="input-field w-64" placeholder="Поиск пользователя..." />
@@ -68,6 +90,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { usersApi } from '@/api/users'
+import { settingsApi } from '@/api/settings'
 import { useNotificationsStore } from '@/stores/notifications'
 import { userTypeLabels } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -78,9 +101,35 @@ const loading = ref(true)
 const search = ref('')
 const roleFilter = ref('')
 const typeFilter = ref('')
+const vatPercent = ref(20)
+const settingsLoading = ref(true)
+const settingsSaving = ref(false)
 let debounceTimer = null
 
-onMounted(() => fetchUsers())
+onMounted(async () => {
+  settingsLoading.value = true
+  try {
+    const { data } = await settingsApi.getAdmin()
+    vatPercent.value = data.vat_rate_percent
+  } catch {
+    notifStore.showToast('Не удалось загрузить настройки', 'error')
+  } finally {
+    settingsLoading.value = false
+  }
+  fetchUsers()
+})
+
+async function saveVat() {
+  settingsSaving.value = true
+  try {
+    await settingsApi.patchAdmin({ vat_rate_percent: Number(vatPercent.value) })
+    notifStore.showToast('Ставка НДС сохранена', 'success')
+  } catch (e) {
+    notifStore.showToast(e.response?.data?.detail || 'Ошибка сохранения', 'error')
+  } finally {
+    settingsSaving.value = false
+  }
+}
 
 function debouncedFetch() {
   clearTimeout(debounceTimer)

@@ -35,6 +35,7 @@
             <h1 class="text-xl font-bold text-gray-900">{{ vehicle.name }}</h1>
             <p class="text-sm text-gray-500 mt-1">{{ vehicle.brand }} {{ vehicle.model }}</p>
             <div class="text-2xl font-bold text-primary-500 mt-4">{{ formatPrice(vehicle.price) }}</div>
+            <div v-if="priceUsd != null" class="text-sm text-gray-500 mt-1">{{ formatUsdAmount(priceUsd) }}</div>
             <div class="flex items-center gap-2 mt-2 text-sm text-gray-500">
               <span :class="vehicle.condition === 'new' ? 'text-green-600 font-medium' : ''">
                 {{ vehicle.condition === 'new' ? 'Новый' : 'С пробегом' }}
@@ -243,7 +244,8 @@ import { usersApi } from '@/api/users'
 import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
-import { formatPrice, formatMileage } from '@/utils/format'
+import { formatPrice, formatUsdAmount, formatMileage } from '@/utils/format'
+import { exchangeRatesApi } from '@/api/exchangeRates'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StarRating from '@/components/common/StarRating.vue'
 
@@ -260,6 +262,7 @@ const notifStore = useNotificationsStore()
 const vehicle = ref(null)
 const loading = ref(true)
 const selectedImage = ref(0)
+const usdRateBynPerUnit = ref(null)
 
 const showLessorModal = ref(false)
 const showRequestModal = ref(false)
@@ -269,6 +272,13 @@ const lessorSearch = ref('')
 const selectedLessor = ref(null)
 const requestForm = ref({ lease_term: 24, prepayment: 0, comment: '' })
 const requestLoading = ref(false)
+
+const priceUsd = computed(() => {
+  const price = vehicle.value?.price
+  const rate = usdRateBynPerUnit.value
+  if (price == null || rate == null || rate <= 0) return null
+  return price / rate
+})
 
 const filteredLessors = computed(() => {
   const s = lessorSearch.value.toLowerCase()
@@ -326,8 +336,20 @@ function initRequestForm() {
 
 onMounted(async () => {
   try {
-    const { data } = await vehiclesApi.get(route.params.id)
-    vehicle.value = data
+    const [vehicleRes, ratesRes] = await Promise.allSettled([
+      vehiclesApi.get(route.params.id),
+      exchangeRatesApi.get(),
+    ])
+    if (vehicleRes.status === 'fulfilled') {
+      vehicle.value = vehicleRes.value.data
+    }
+    if (ratesRes.status === 'fulfilled') {
+      const list = ratesRes.value.data?.currencies || []
+      const usd = list.find((c) => c.code === 'USD')
+      if (usd?.rate_byn_per_unit > 0) {
+        usdRateBynPerUnit.value = usd.rate_byn_per_unit
+      }
+    }
   } finally {
     loading.value = false
   }

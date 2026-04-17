@@ -26,6 +26,11 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    NBRB_BASE_URL: str = "https://api.nbrb.by"
+    NBRB_REQUEST_TIMEOUT: float = 15.0
+
+    VAT_RATE_PERCENT: float = 20.0
+
     class Config:
         env_file = ".env"
         case_sensitive = True

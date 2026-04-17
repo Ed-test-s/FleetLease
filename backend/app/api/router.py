@@ -1,10 +1,12 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import auth, chats, leasing, notifications, references, reviews, users, vehicles
+from app.api.endpoints import admin_settings, auth, chats, exchange_rates, leasing, notifications, references, reviews, users, vehicles
 
 api_router = APIRouter()
 
 api_router.include_router(auth.router)
+api_router.include_router(exchange_rates.router)
+api_router.include_router(admin_settings.router)
 api_router.include_router(users.router)
 api_router.include_router(vehicles.router)
 api_router.include_router(leasing.router)

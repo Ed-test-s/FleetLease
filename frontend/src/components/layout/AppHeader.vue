@@ -30,6 +30,7 @@
 
         <!-- Right section -->
         <div class="flex items-center gap-3">
+          <CurrencyRatesBar />
           <template v-if="auth.isAuthenticated">
             <!-- Notifications -->
             <router-link to="/notifications" class="relative p-2 text-gray-500 hover:text-primary-500 transition-colors">
@@ -97,6 +98,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
+import CurrencyRatesBar from '@/components/layout/CurrencyRatesBar.vue'
 
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()

@@ -22,6 +22,7 @@ from app.models.leasing import (
 from app.models.notification import Notification
 from app.models.user import LeaseTerm, User, UserRole
 from app.models.vehicle import Vehicle
+from app.services.settings_service import get_vat_rate_percent
 from app.services.user_display import user_display_name
 from app.schemas.leasing import (
     CalculatorRequest,
@@ -336,6 +337,8 @@ async def generate_schedule(
 
     start = contract.start_date or date.today()
     remaining = principal
+    vat_rate = await get_vat_rate_percent(db)
+    vat_fraction = vat_rate / 100.0
     items = []
 
     for i in range(1, n + 1):
@@ -350,7 +353,7 @@ async def generate_schedule(
             total_amount=round(annuity, 2),
             principal_amount=round(principal_part, 2),
             interest_amount=round(interest, 2),
-            vat_amount=round(annuity * 0.20, 2),
+            vat_amount=round(annuity * vat_fraction, 2),
             remaining_debt=round(max(remaining, 0), 2),
         )
         db.add(ps)
