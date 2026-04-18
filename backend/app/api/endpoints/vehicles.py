@@ -7,10 +7,39 @@ from app.api.deps import get_current_user, get_optional_user, require_role
 from app.core.database import get_db
 from app.models.user import User, UserRole, UserType
 from app.models.vehicle import Vehicle, VehicleCondition, VehicleImage
-from app.schemas.vehicle import VehicleCreate, VehicleListOut, VehicleOut, VehicleUpdate
+from app.schemas.vehicle import VehicleCreate, VehicleListOut, VehicleOut, VehicleSellerOut, VehicleUpdate
 from app.services.storage import storage_service
+from app.services.user_display import user_display_name
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+
+
+def _vehicle_detail_load():
+    return (
+        selectinload(Vehicle.images),
+        selectinload(Vehicle.supplier).options(
+            selectinload(User.individual),
+            selectinload(User.entrepreneur),
+            selectinload(User.company),
+        ),
+    )
+
+
+def vehicle_to_out(vehicle: Vehicle) -> VehicleOut:
+    out = VehicleOut.model_validate(vehicle)
+    sup = vehicle.supplier
+    if sup is None:
+        return out
+    display_name = user_display_name(sup) or sup.login
+    return out.model_copy(
+        update={
+            "seller": VehicleSellerOut(
+                id=sup.id,
+                display_name=display_name,
+                avatar_url=sup.avatar_url,
+            )
+        }
+    )
 
 
 @router.get("/", response_model=list[VehicleListOut])
@@ -119,12 +148,12 @@ async def list_vehicles(
 @router.get("/{vehicle_id}", response_model=VehicleOut)
 async def get_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Vehicle).options(selectinload(Vehicle.images)).where(Vehicle.id == vehicle_id)
+        select(Vehicle).options(*_vehicle_detail_load()).where(Vehicle.id == vehicle_id)
     )
     vehicle = result.scalar_one_or_none()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    return vehicle
+    return vehicle_to_out(vehicle)
 
 
 @router.post("/", response_model=VehicleOut, status_code=201)
@@ -137,9 +166,9 @@ async def create_vehicle(
     db.add(vehicle)
     await db.flush()
     result = await db.execute(
-        select(Vehicle).options(selectinload(Vehicle.images)).where(Vehicle.id == vehicle.id)
+        select(Vehicle).options(*_vehicle_detail_load()).where(Vehicle.id == vehicle.id)
     )
-    return result.scalar_one()
+    return vehicle_to_out(result.scalar_one())
 
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut)
@@ -150,7 +179,7 @@ async def update_vehicle(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Vehicle).options(selectinload(Vehicle.images)).where(
+        select(Vehicle).options(*_vehicle_detail_load()).where(
             Vehicle.id == vehicle_id, Vehicle.supplier_id == user.id
         )
     )
@@ -161,7 +190,7 @@ async def update_vehicle(
     for k, v in update_data.items():
         setattr(vehicle, k, v)
     await db.flush()
-    return vehicle
+    return vehicle_to_out(vehicle)
 
 
 @router.delete("/{vehicle_id}", status_code=204)
@@ -191,7 +220,7 @@ async def upload_vehicle_image(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Vehicle).options(selectinload(Vehicle.images)).where(
+        select(Vehicle).options(*_vehicle_detail_load()).where(
             Vehicle.id == vehicle_id, Vehicle.supplier_id == user.id
         )
     )
@@ -204,9 +233,9 @@ async def upload_vehicle_image(
     await db.flush()
 
     result = await db.execute(
-        select(Vehicle).options(selectinload(Vehicle.images)).where(Vehicle.id == vehicle.id)
+        select(Vehicle).options(*_vehicle_detail_load()).where(Vehicle.id == vehicle.id)
     )
-    return result.scalar_one()
+    return vehicle_to_out(result.scalar_one())
 
 
 @router.delete("/{vehicle_id}/images/{image_id}", status_code=204)

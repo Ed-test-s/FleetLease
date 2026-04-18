@@ -152,24 +152,44 @@ def _gen_contract_number(prefix: str = "FL") -> str:
     return f"{prefix}-{time.time_ns() // 1_000_000:X}"
 
 
+def _lease_financed_amount(asset_price: float, prepayment: float) -> float:
+    """Часть стоимости техники, распределяемая на срок лизинга (без аванса)."""
+    return max(0.0, asset_price - prepayment)
+
+
+def _lease_contract_total_amount(asset_price: float, prepayment: float, interest_rate_pct: float) -> float:
+    """Полная сумма договора: аванс + финансируемая часть × (1 + ставка%)."""
+    f = _lease_financed_amount(asset_price, prepayment)
+    return prepayment + f * (1.0 + interest_rate_pct / 100.0)
+
+
+def _lease_monthly_payment(
+    asset_price: float, prepayment: float, interest_rate_pct: float, term_months: int
+) -> float:
+    """Сумма ежемесячных платежей (без аванса) / срок — равными долями."""
+    f = _lease_financed_amount(asset_price, prepayment)
+    if f <= 0 or term_months <= 0:
+        return 0.0
+    financed_repay = f * (1.0 + interest_rate_pct / 100.0)
+    return financed_repay / term_months
+
+
 # ── Calculator ────────────────────────────────────────────────────────
 @router.post("/calculator", response_model=CalculatorResponse)
 async def calculate_leasing(data: CalculatorRequest):
+    if data.term_months < 1:
+        raise HTTPException(status_code=400, detail="Term months must be at least 1")
+
     principal = data.asset_price - data.prepayment
     if principal <= 0:
         raise HTTPException(status_code=400, detail="Prepayment exceeds asset price")
 
-    monthly_rate = data.interest_rate / 100.0 / 12.0
-    n = data.term_months
-
-    if monthly_rate > 0:
-        annuity = principal * (monthly_rate * (1 + monthly_rate) ** n) / ((1 + monthly_rate) ** n - 1)
-    else:
-        annuity = principal / n
-
-    total = annuity * n + data.prepayment
+    total = _lease_contract_total_amount(data.asset_price, data.prepayment, data.interest_rate)
+    monthly = _lease_monthly_payment(
+        data.asset_price, data.prepayment, data.interest_rate, data.term_months
+    )
     return CalculatorResponse(
-        monthly_payment=round(annuity, 2),
+        monthly_payment=round(monthly, 2),
         total_amount=round(total, 2),
         overpayment=round(total - data.asset_price, 2),
     )
@@ -294,7 +314,9 @@ async def update_request_status(
         lt = lt_res.scalar_one_or_none()
         interest_rate = lt.interest_rate if lt else 12.0
         price = vehicle.price if vehicle else 0
-        total_amount = round(price * (1 + interest_rate / 100.0), 2)
+        total_amount = round(
+            _lease_contract_total_amount(price, req.prepayment, interest_rate), 2
+        )
 
         contract = Contract(
             request_id=req.id,
@@ -711,35 +733,52 @@ async def generate_schedule(
     if not req:
         raise HTTPException(status_code=400, detail="Связанная заявка не найдена")
 
-    principal = contract.total_amount - contract.prepayment
-    monthly_rate = contract.interest_rate / 100.0 / 12.0
+    vehicle = await db.get(Vehicle, contract.vehicle_id)
+    price = float(vehicle.price) if vehicle else 0.0
+    prepayment = float(contract.prepayment)
+    r_pct = float(contract.interest_rate)
+    f = _lease_financed_amount(price, prepayment)
+    financed_repay = f * (1.0 + r_pct / 100.0)
     n = req.lease_term
-
-    if monthly_rate > 0:
-        annuity = principal * (monthly_rate * (1 + monthly_rate) ** n) / ((1 + monthly_rate) ** n - 1)
-    else:
-        annuity = principal / n
+    if n < 1:
+        raise HTTPException(status_code=400, detail="Срок лизинга в заявке не задан")
 
     start = contract.start_date or contract.signing_date or date.today()
-    remaining = principal
     vat_rate = contract.vat_rate or await get_vat_rate_percent(db)
     vat_fraction = vat_rate / 100.0
     items = []
 
+    sum_pay = 0.0
+    sum_princ = 0.0
+
     for i in range(1, n + 1):
-        interest = remaining * monthly_rate
-        principal_part = annuity - interest
-        remaining -= principal_part
+        is_last = i == n
+        if f <= 0:
+            pay = 0.0
+            principal_part = 0.0
+            interest_part = 0.0
+        elif is_last:
+            pay = round(financed_repay - sum_pay, 2)
+            principal_part = round(f - sum_princ, 2)
+            interest_part = round(pay - principal_part, 2)
+        else:
+            pay = round(financed_repay / n, 2)
+            principal_part = round(f / n, 2)
+            interest_part = round(pay - principal_part, 2)
+        sum_pay += pay
+        sum_princ += principal_part
+        remaining_after = round(financed_repay - sum_pay, 2)
+
         payment_date = start + timedelta(days=30 * i)
 
         ps = PaymentSchedule(
             contract_id=contract.id,
             payment_date=payment_date,
-            total_amount=round(annuity, 2),
+            total_amount=round(pay, 2),
             principal_amount=round(principal_part, 2),
-            interest_amount=round(interest, 2),
-            vat_amount=round(annuity * vat_fraction, 2),
-            remaining_debt=round(max(remaining, 0), 2),
+            interest_amount=round(interest_part, 2),
+            vat_amount=round(pay * vat_fraction, 2),
+            remaining_debt=round(max(remaining_after, 0), 2),
         )
         db.add(ps)
         items.append(ps)

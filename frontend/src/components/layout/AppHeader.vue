@@ -47,8 +47,9 @@
             <div class="relative" ref="menuRef">
               <button @click="showMenu = !showMenu"
                       class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-surface-100 transition-colors">
-                <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-semibold">
-                  {{ auth.userName?.charAt(0)?.toUpperCase() || 'U' }}
+                <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-semibold overflow-hidden flex-shrink-0">
+                  <img v-if="auth.user?.avatar_url" :src="auth.user.avatar_url" class="w-full h-full object-cover" alt="" />
+                  <span v-else>{{ auth.userName?.charAt(0)?.toUpperCase() || 'U' }}</span>
                 </div>
                 <span class="hidden sm:block text-sm font-medium text-gray-700 max-w-[140px] truncate">
                   {{ auth.userName }}

@@ -47,6 +47,12 @@ class VehicleUpdate(VehicleCreate):
     vin: str | None = None
 
 
+class VehicleSellerOut(BaseModel):
+    id: int
+    display_name: str
+    avatar_url: str | None = None
+
+
 class VehicleOut(BaseModel):
     id: int
     supplier_id: int
@@ -75,6 +81,7 @@ class VehicleOut(BaseModel):
     is_visible: bool
     created_at: datetime
     images: list[VehicleImageOut] = []
+    seller: VehicleSellerOut | None = None
 
     model_config = {"from_attributes": True}
 

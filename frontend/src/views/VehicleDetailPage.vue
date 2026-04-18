@@ -58,13 +58,17 @@
           </div>
 
           <!-- Supplier info -->
-          <router-link :to="`/users/${vehicle.supplier_id}`" class="card p-4 flex items-center gap-3 hover:bg-surface-50 transition-colors">
-            <div class="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-semibold flex-shrink-0">
-              П
+          <router-link
+            :to="`/users/${vehicle.seller?.id ?? vehicle.supplier_id}`"
+            class="card p-4 flex items-center gap-3 hover:bg-surface-50 transition-colors"
+          >
+            <div class="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-sm font-semibold flex-shrink-0 overflow-hidden">
+              <img v-if="vehicle.seller?.avatar_url" :src="vehicle.seller.avatar_url" class="w-full h-full object-cover" alt="" />
+              <span v-else>{{ sellerInitial }}</span>
             </div>
             <div class="min-w-0">
-              <p class="text-sm font-medium text-gray-900">Продавец</p>
-              <p class="text-xs text-gray-500 truncate">Перейти в профиль поставщика</p>
+              <p class="text-sm font-medium text-gray-900 truncate">{{ sellerDisplayName }}</p>
+              <p class="text-xs text-gray-500 truncate">Профиль поставщика</p>
             </div>
             <svg class="w-4 h-4 text-gray-400 ml-auto flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -317,6 +321,14 @@ const priceUsd = computed(() => {
   if (price == null || rate == null || rate <= 0) return null
   return price / rate
 })
+
+const sellerDisplayName = computed(() => {
+  const s = vehicle.value?.seller
+  if (s?.display_name) return s.display_name
+  return 'Поставщик'
+})
+
+const sellerInitial = computed(() => sellerDisplayName.value?.charAt(0)?.toUpperCase() || '?')
 
 const filteredLessors = computed(() => {
   const s = lessorSearch.value.toLowerCase()
