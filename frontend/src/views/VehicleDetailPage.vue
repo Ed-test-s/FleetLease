@@ -45,11 +45,13 @@
             </div>
 
             <button v-if="auth.isAuthenticated && auth.userRole === 'client'"
-                    @click="showLessorModal = true" class="btn-primary w-full mt-6">
+                    type="button"
+                    @click="openLeaseRequestFlow" class="btn-primary w-full mt-6">
               Подать заявку на лизинг
             </button>
             <button v-else-if="auth.isAuthenticated && auth.userRole === 'lease_manager'"
-                    @click="showPurchaseModal = true" class="btn-primary w-full mt-6">
+                    type="button"
+                    @click="openPurchaseFlow" class="btn-primary w-full mt-6">
               Заявка на покупку
             </button>
             <router-link v-else-if="!auth.isAuthenticated" to="/login" class="btn-primary w-full mt-6 text-center">
@@ -282,6 +284,7 @@ import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatPrice, formatUsdAmount, formatMileage } from '@/utils/format'
+import { hasBankRequisites } from '@/utils/banking'
 import { exchangeRatesApi } from '@/api/exchangeRates'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StarRating from '@/components/common/StarRating.vue'
@@ -426,8 +429,31 @@ watch(showLessorModal, async (val) => {
   }
 })
 
+const bankRequiredMsg =
+  'Укажите в профиле хотя бы один банковский счёт: IBAN, название и адрес отделения банка, BIC или SWIFT.'
+
+function openLeaseRequestFlow() {
+  if (!hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
+  showLessorModal.value = true
+}
+
+function openPurchaseFlow() {
+  if (!hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
+  showPurchaseModal.value = true
+}
+
 function selectLessor(l) {
   if (!lessorEligible(l)) return
+  if (!hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
   selectedLessor.value = l
   initRequestForm()
   showLessorModal.value = false
@@ -435,6 +461,10 @@ function selectLessor(l) {
 }
 
 async function submitPurchaseRequest() {
+  if (!hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
   purchaseLoading.value = true
   try {
     await leasingApi.createSupplierRequest({
@@ -452,6 +482,10 @@ async function submitPurchaseRequest() {
 }
 
 async function submitRequest() {
+  if (!hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
   const lt = selectedLessor.value?.lease_terms
   const price = vehicle.value?.price
   if (lt && price != null) {

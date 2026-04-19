@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.user import ContactType, UserRole, UserType
 
@@ -80,15 +80,33 @@ _BANK_CODE_RE = re.compile(r"^[a-zA-Z0-9]+$")
 
 
 class BankAccountCreate(BaseModel):
-    iban: str | None = None
-    bank_name: str | None = None
-    bank_address: str | None = None
+    iban: str
+    bank_name: str
+    bank_address: str
     swift: str | None = None
     bic: str | None = None
 
+    @field_validator("iban", "bank_name", "bank_address", mode="before")
+    @classmethod
+    def _strip_required(cls, v: object) -> str:
+        if v is None:
+            raise ValueError("Поле обязательно")
+        s = str(v).strip()
+        if not s:
+            raise ValueError("Поле обязательно")
+        return s
+
+    @field_validator("swift", "bic", mode="before")
+    @classmethod
+    def _strip_optional(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
+
     @field_validator("iban", "swift", "bic")
     @classmethod
-    def latin_digits_only(cls, v: str | None) -> str | None:
+    def _latin_digits_only(cls, v: str | None) -> str | None:
         if v is None or v == "":
             return v
         if not _BANK_CODE_RE.fullmatch(v):
@@ -97,9 +115,21 @@ class BankAccountCreate(BaseModel):
             )
         return v
 
+    @model_validator(mode="after")
+    def _bic_or_swift(self) -> "BankAccountCreate":
+        if not self.bic and not self.swift:
+            raise ValueError("Укажите BIC или SWIFT (обязателен минимум один код).")
+        return self
 
-class BankAccountOut(BankAccountCreate):
+
+class BankAccountOut(BaseModel):
     id: int
+    iban: str | None = None
+    bank_name: str | None = None
+    bank_address: str | None = None
+    swift: str | None = None
+    bic: str | None = None
+
     model_config = {"from_attributes": True}
 
 

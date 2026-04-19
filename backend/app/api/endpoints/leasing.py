@@ -31,6 +31,7 @@ from app.services.contract_document import (
     generate_psa_document,
     upload_contract_document,
 )
+from app.services.banking_requisites import ensure_user_has_bank_requisites
 from app.services.settings_service import get_vat_rate_percent
 from app.services.user_display import user_display_name
 from app.schemas.leasing import (
@@ -206,6 +207,12 @@ async def create_request(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
+    await ensure_user_has_bank_requisites(
+        db,
+        user.id,
+        detail="Укажите в профиле хотя бы один банковский счёт с полными реквизитами, чтобы подать заявку на лизинг.",
+    )
+
     lt_result = await db.execute(select(LeaseTerm).where(LeaseTerm.user_id == data.lease_company_id))
     lt = lt_result.scalar_one_or_none()
     if lt:
@@ -305,6 +312,12 @@ async def update_request_status(
         raise HTTPException(status_code=404, detail="Request not found")
     if user.role == UserRole.LEASE_MANAGER and req.lease_company_id != user.id:
         raise HTTPException(status_code=403, detail="Access denied")
+    if data.status == RequestStatus.APPROVED:
+        await ensure_user_has_bank_requisites(
+            db,
+            req.lease_company_id,
+            detail="У лизингодателя должны быть заполнены банковские реквизиты в профиле для одобрения заявки.",
+        )
     req.status = data.status
     await db.flush()
 
@@ -376,6 +389,12 @@ async def create_supplier_request(
     lease_req = await db.get(LeaseRequest, data.lease_request_id)
     if not lease_req:
         raise HTTPException(status_code=404, detail="Lease request not found")
+
+    await ensure_user_has_bank_requisites(
+        db,
+        user.id,
+        detail="Укажите в профиле хотя бы один банковский счёт с полными реквизитами, чтобы отправить заявку на покупку техники.",
+    )
 
     sr = SupplierRequest(
         lease_request_id=data.lease_request_id,
@@ -466,6 +485,12 @@ async def update_supplier_request_status(
     if user.role == UserRole.SUPPLIER and sr.supplier_id != user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    if data.status == SupplierRequestStatus.APPROVED:
+        await ensure_user_has_bank_requisites(
+            db,
+            sr.supplier_id,
+            detail="Укажите в профиле хотя бы один банковский счёт с полными реквизитами, чтобы одобрить заявку на покупку.",
+        )
     sr.status = data.status
     await db.flush()
 

@@ -122,6 +122,7 @@ import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatPrice, formatDateTime } from '@/utils/format'
+import { hasBankRequisites } from '@/utils/banking'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 
@@ -174,13 +175,24 @@ async function updateLeaseStatus(id, status) {
   fetchData()
 }
 
+const bankRequiredMsg =
+  'Укажите в профиле полные банковские реквизиты (IBAN, банк, адрес отделения, BIC или SWIFT).'
+
 async function approveRequest(r) {
+  if (!hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
   await leasingApi.updateRequestStatus(r.id, 'approved')
   notifStore.showToast('Заявка одобрена, договор лизинга создан', 'success')
   fetchData()
 }
 
 async function updateSupplierStatus(id, status) {
+  if (status === 'approved' && !hasBankRequisites(auth.user)) {
+    notifStore.showToast(bankRequiredMsg, 'error')
+    return
+  }
   await leasingApi.updateSupplierRequestStatus(id, status)
   if (status === 'approved') {
     notifStore.showToast('Заявка на покупку одобрена, ДКП создан', 'success')

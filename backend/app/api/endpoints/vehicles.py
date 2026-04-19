@@ -74,7 +74,14 @@ async def list_vehicles(
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
-    q = select(Vehicle).options(selectinload(Vehicle.images)).where(Vehicle.is_visible.is_(True))
+    q = select(Vehicle).options(selectinload(Vehicle.images))
+    own_catalog = (
+        supplier_id is not None
+        and user is not None
+        and user.id == supplier_id
+    )
+    if not own_catalog:
+        q = q.where(Vehicle.is_visible.is_(True))
 
     if search:
         pattern = f"%{search}%"
@@ -146,12 +153,18 @@ async def list_vehicles(
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut)
-async def get_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db)):
+async def get_vehicle(
+    vehicle_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     result = await db.execute(
         select(Vehicle).options(*_vehicle_detail_load()).where(Vehicle.id == vehicle_id)
     )
     vehicle = result.scalar_one_or_none()
     if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    if not vehicle.is_visible and (user is None or user.id != vehicle.supplier_id):
         raise HTTPException(status_code=404, detail="Vehicle not found")
     return vehicle_to_out(vehicle)
 

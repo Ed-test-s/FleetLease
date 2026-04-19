@@ -128,14 +128,18 @@
 
       <!-- Bank accounts -->
       <div class="card p-6 mb-6">
-        <h3 class="text-sm font-semibold text-gray-800 mb-3">Банковские счета</h3>
+        <h3 class="text-sm font-semibold text-gray-800 mb-1">Банковские счета</h3>
+        <p class="text-xs text-gray-500 mb-4">
+          Для участия в сделках обязательны: IBAN, название банка, адрес отделения банка (где открыт счёт), а также
+          <span class="font-medium text-gray-700">BIC или SWIFT</span> — укажите хотя бы один из кодов (можно оба).
+        </p>
         <div class="space-y-4">
           <div v-for="ba in auth.user.bank_accounts" :key="ba.id" class="p-3 rounded-lg border border-surface-200 text-sm">
             <div class="flex justify-between items-start">
               <div class="space-y-1">
                 <p><span class="text-gray-500">IBAN:</span> {{ ba.iban }}</p>
                 <p><span class="text-gray-500">Банк:</span> {{ ba.bank_name }}</p>
-                <p v-if="ba.bank_address"><span class="text-gray-500">Адрес:</span> {{ ba.bank_address }}</p>
+                <p v-if="ba.bank_address"><span class="text-gray-500">Адрес отделения:</span> {{ ba.bank_address }}</p>
                 <p v-if="ba.swift"><span class="text-gray-500">SWIFT:</span> {{ ba.swift }}</p>
                 <p v-if="ba.bic"><span class="text-gray-500">BIC:</span> {{ ba.bic }}</p>
               </div>
@@ -145,37 +149,61 @@
         </div>
         <details class="mt-4">
           <summary class="text-sm text-primary-500 cursor-pointer font-medium">Добавить счёт</summary>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            <input
-              :value="newBankAccount.iban"
-              class="input-field"
-              placeholder="IBAN (28 символов)"
-              autocomplete="off"
-              spellcheck="false"
-              @input="onBankCodeInput('iban', $event)"
-            />
-            <input
-              v-model="newBankAccount.bank_name"
-              class="input-field"
-              placeholder='Название банка - например OAO "Белгазпромбанк"'
-            />
-            <input v-model="newBankAccount.bank_address" class="input-field" placeholder="Адрес банка" />
-            <input
-              :value="newBankAccount.swift"
-              class="input-field"
-              placeholder="SWIFT"
-              autocomplete="off"
-              spellcheck="false"
-              @input="onBankCodeInput('swift', $event)"
-            />
-            <input
-              :value="newBankAccount.bic"
-              class="input-field"
-              placeholder="BIC"
-              autocomplete="off"
-              spellcheck="false"
-              @input="onBankCodeInput('bic', $event)"
-            />
+          <div class="mt-3 space-y-4">
+            <div>
+              <label class="label text-xs">IBAN <span class="text-red-500">*</span></label>
+              <input
+                :value="newBankAccount.iban"
+                class="input-field"
+                placeholder="Например BY00AAAA00000000000000000000"
+                autocomplete="off"
+                spellcheck="false"
+                @input="onBankCodeInput('iban', $event)"
+              />
+            </div>
+            <div>
+              <label class="label text-xs">Название банка <span class="text-red-500">*</span></label>
+              <input
+                v-model="newBankAccount.bank_name"
+                class="input-field"
+                placeholder='ОАО «Альфа-Банк» или иное полное наименование банка'
+              />
+            </div>
+            <div>
+              <label class="label text-xs">Адрес отделения банка <span class="text-red-500">*</span></label>
+              <input
+                v-model="newBankAccount.bank_address"
+                class="input-field"
+                placeholder="Город, улица, № отделения — где открывали счёт"
+              />
+            </div>
+            <p class="text-xs text-gray-500 -mt-2">
+              BIC и SWIFT: укажите один или оба кода (минимум один обязателен).
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="label text-xs">BIC</label>
+                <input
+                  :value="newBankAccount.bic"
+                  class="input-field"
+                  placeholder="Банковский идентификационный код"
+                  autocomplete="off"
+                  spellcheck="false"
+                  @input="onBankCodeInput('bic', $event)"
+                />
+              </div>
+              <div>
+                <label class="label text-xs">SWIFT</label>
+                <input
+                  :value="newBankAccount.swift"
+                  class="input-field"
+                  placeholder="SWIFT/BIC международный код"
+                  autocomplete="off"
+                  spellcheck="false"
+                  @input="onBankCodeInput('swift', $event)"
+                />
+              </div>
+            </div>
             <button @click="addBankAccount" class="btn-primary btn-sm">Добавить счёт</button>
           </div>
         </details>
@@ -288,23 +316,47 @@ function onBankCodeInput(field, e) {
 }
 
 async function addBankAccount() {
-  const { iban, swift, bic } = newBankAccount.value
+  const b = newBankAccount.value
+  const nz = (x) => x != null && String(x).trim() !== ''
+  if (!nz(b.iban)) {
+    notifStore.showToast('Укажите IBAN', 'error')
+    return
+  }
+  if (!nz(b.bank_name)) {
+    notifStore.showToast('Укажите название банка', 'error')
+    return
+  }
+  if (!nz(b.bank_address)) {
+    notifStore.showToast('Укажите адрес отделения банка, где открыт счёт', 'error')
+    return
+  }
+  if (!nz(b.bic) && !nz(b.swift)) {
+    notifStore.showToast('Укажите BIC или SWIFT (минимум один код)', 'error')
+    return
+  }
   for (const [label, val] of [
-    ['IBAN', iban],
-    ['SWIFT', swift],
-    ['BIC', bic],
+    ['IBAN', b.iban],
+    ['SWIFT', b.swift],
+    ['BIC', b.bic],
   ]) {
     if (val && !bankLatinDigitsRe.test(val)) {
       notifStore.showToast(
-        `${label}, SWIFT, BIC: только латинские буквы и цифры, без пробелов`,
+        `${label}: только латинские буквы и цифры, без пробелов`,
         'error',
       )
       return
     }
   }
-  await usersApi.addBankAccount(newBankAccount.value)
+  await usersApi.addBankAccount({
+    iban: b.iban.trim(),
+    bank_name: b.bank_name.trim(),
+    bank_address: b.bank_address.trim(),
+    swift: nz(b.swift) ? b.swift : null,
+    bic: nz(b.bic) ? b.bic : null,
+  })
   await auth.fetchUser()
   newBankAccount.value = { iban: '', bank_name: '', bank_address: '', swift: '', bic: '' }
+  notifStore.showToast('Счёт добавлен', 'success')
 }
 
 async function deleteBankAccount(id) {
