@@ -127,6 +127,33 @@ async def _supplier_requests_out_batch(
     return out
 
 
+async def _psa_contract_for_request(db: AsyncSession, request_id: int) -> Contract | None:
+    """Один ДКП по заявке (при нескольких — с наибольшим id)."""
+    res = await db.execute(
+        select(Contract)
+        .where(
+            Contract.request_id == request_id,
+            Contract.contract_type == ContractType.PURCHASE_SALE,
+        )
+        .order_by(Contract.id.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
+async def _lease_contract_for_request(db: AsyncSession, request_id: int) -> Contract | None:
+    res = await db.execute(
+        select(Contract)
+        .where(
+            Contract.request_id == request_id,
+            Contract.contract_type == ContractType.LEASE,
+        )
+        .order_by(Contract.id.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
 async def _contract_out(db: AsyncSession, contract: Contract) -> ContractOut:
     co = ContractOut.model_validate(contract)
     u_ids: set[int] = {contract.lessor_id}
@@ -139,14 +166,31 @@ async def _contract_out(db: AsyncSession, contract: Contract) -> ContractOut:
     vres = await db.execute(select(Vehicle.name).where(Vehicle.id == contract.vehicle_id))
     vname = vres.scalar_one_or_none()
 
-    return co.model_copy(
-        update={
-            "vehicle_name": vname,
-            "lessee_label": user_display_name(umap.get(contract.lessee_id)) if contract.lessee_id else None,
-            "lessor_label": user_display_name(umap.get(contract.lessor_id)),
-            "supplier_label": user_display_name(umap.get(contract.supplier_id)) if contract.supplier_id else None,
-        }
-    )
+    extra: dict = {
+        "vehicle_name": vname,
+        "lessee_label": user_display_name(umap.get(contract.lessee_id)) if contract.lessee_id else None,
+        "lessor_label": user_display_name(umap.get(contract.lessor_id)),
+        "supplier_label": user_display_name(umap.get(contract.supplier_id)) if contract.supplier_id else None,
+    }
+
+    if contract.request_id:
+        if contract.contract_type == ContractType.LEASE:
+            psa = await _psa_contract_for_request(db, contract.request_id)
+            if psa:
+                extra["linked_purchase_contract_id"] = psa.id
+                extra["linked_purchase_contract_number"] = psa.contract_number
+                extra["linked_purchase_status"] = psa.status
+                if not co.tech_passport_number and psa.tech_passport_number:
+                    extra["tech_passport_number"] = psa.tech_passport_number
+                if not co.tech_passport_date and psa.tech_passport_date:
+                    extra["tech_passport_date"] = psa.tech_passport_date
+        elif contract.contract_type == ContractType.PURCHASE_SALE:
+            la = await _lease_contract_for_request(db, contract.request_id)
+            if la:
+                extra["linked_lease_contract_id"] = la.id
+                extra["linked_lease_contract_number"] = la.contract_number
+
+    return co.model_copy(update=extra)
 
 
 def _gen_contract_number(prefix: str = "FL") -> str:
@@ -620,13 +664,28 @@ async def update_contract_status(
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if (
+        data.status == ContractStatus.ACTIVE
+        and contract.contract_type == ContractType.LEASE
+    ):
+        if not contract.request_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя активировать договор лизинга без привязки к заявке.",
+            )
+        psa = await _psa_contract_for_request(db, contract.request_id)
+        if psa is None or psa.status != ContractStatus.COMPLETED:
+            raise HTTPException(
+                status_code=400,
+                detail="Активация договора лизинга возможна после завершения договора купли-продажи (ДКП).",
+            )
     contract.status = data.status
     await db.flush()
 
     notify_ids: set[int] = set()
     if contract.lessee_id:
         notify_ids.add(contract.lessee_id)
-    if contract.supplier_id:
+    if contract.supplier_id and contract.contract_type == ContractType.PURCHASE_SALE:
         notify_ids.add(contract.supplier_id)
     notify_ids.discard(user.id)
     for uid in notify_ids:
@@ -672,6 +731,22 @@ async def update_contract_fields(
             contract.tech_passport_number = data.tech_passport_number
         if data.tech_passport_date is not None:
             contract.tech_passport_date = data.tech_passport_date
+        if contract.request_id:
+            lease_res = await db.execute(
+                select(Contract).where(
+                    Contract.request_id == contract.request_id,
+                    Contract.contract_type == ContractType.LEASE,
+                )
+            )
+            for lc in lease_res.scalars().all():
+                if data.tech_passport_number is not None:
+                    lc.tech_passport_number = data.tech_passport_number
+                if data.tech_passport_date is not None:
+                    lc.tech_passport_date = data.tech_passport_date
+                lc.lessee_confirmed = False
+                lc.lessor_confirmed = False
+                lc.supplier_confirmed = False
+                lc.all_confirmed = False
     else:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -870,6 +945,15 @@ async def generate_documents(
         raise HTTPException(status_code=404, detail="Contract not found")
     if not contract.all_confirmed:
         raise HTTPException(status_code=400, detail="Все стороны должны подтвердить данные перед генерацией документов")
+
+    if contract.contract_type == ContractType.LEASE and contract.request_id:
+        psa = await _psa_contract_for_request(db, contract.request_id)
+        if psa:
+            if not contract.tech_passport_number and psa.tech_passport_number:
+                contract.tech_passport_number = psa.tech_passport_number
+            if not contract.tech_passport_date and psa.tech_passport_date:
+                contract.tech_passport_date = psa.tech_passport_date
+            await db.flush()
 
     vehicle = await db.get(Vehicle, contract.vehicle_id)
 

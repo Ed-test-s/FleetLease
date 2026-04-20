@@ -120,6 +120,11 @@ class ContractOut(BaseModel):
     lessee_label: str | None = None
     lessor_label: str | None = None
     supplier_label: str | None = None
+    linked_purchase_contract_id: int | None = None
+    linked_purchase_contract_number: str | None = None
+    linked_purchase_status: ContractStatus | None = None
+    linked_lease_contract_id: int | None = None
+    linked_lease_contract_number: str | None = None
     model_config = {"from_attributes": True}
 
 

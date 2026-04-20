@@ -1,6 +1,6 @@
 <template>
   <header class="bg-white border-b border-surface-200 sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+    <div class="max-w-screen-2xl mx-auto px-4 sm:px-6">
       <div class="flex items-center justify-between h-16">
         <!-- Logo -->
         <router-link to="/" class="flex items-center gap-2.5">
@@ -137,7 +137,7 @@ function handleLogout() {
 
 <style scoped>
 .nav-link {
-  @apply px-3 py-2 text-sm font-medium text-gray-600 rounded-lg hover:text-primary-500 hover:bg-primary-50 transition-colors;
+  @apply px-3 py-2 text-sm font-medium text-gray-600 rounded-lg hover:text-primary-500 hover:bg-primary-50 transition-colors whitespace-nowrap;
 }
 .router-link-active.nav-link {
   @apply text-primary-500 bg-primary-50;

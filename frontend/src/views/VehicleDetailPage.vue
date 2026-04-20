@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+  <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
     <LoadingSpinner v-if="loading" />
     <template v-else-if="vehicle">
       <div class="mb-4">

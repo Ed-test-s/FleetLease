@@ -131,7 +131,7 @@ watch(open, (v) => {
 
 <style scoped>
 .rates-btn {
-  @apply inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-600 rounded-lg;
+  @apply inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-600 rounded-lg whitespace-nowrap;
   @apply hover:text-primary-500 hover:bg-primary-50 transition-colors;
 }
 </style>

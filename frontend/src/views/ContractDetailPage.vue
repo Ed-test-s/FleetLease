@@ -3,7 +3,7 @@
     <router-link to="/contracts" class="text-sm text-primary-500 hover:underline mb-4 inline-block">&larr; Все договоры</router-link>
 
     <LoadingSpinner v-if="loading" />
-    <template v-else-if="contract">
+    <div v-else-if="contract" :key="String(route.params.id)">
       <!-- Contract info -->
       <div class="card p-6 mb-6">
         <div class="flex items-start justify-between">
@@ -16,11 +16,32 @@
               </span>
             </div>
             <p v-if="contract.vehicle_name" class="text-sm text-gray-500 mt-1">Техника: {{ contract.vehicle_name }}</p>
+            <p v-if="contract.contract_type === 'purchase_sale' && contract.linked_lease_contract_id && auth.userRole !== 'supplier'" class="text-sm mt-2">
+              <a
+                href="#"
+                class="text-primary-600 hover:underline cursor-pointer"
+                @click.prevent="goToContract(contract.linked_lease_contract_id)"
+              >
+                Связанный договор лизинга {{ contract.linked_lease_contract_number }}
+              </a>
+            </p>
           </div>
-          <div v-if="auth.userRole === 'lease_manager'" class="flex gap-2">
-            <button v-if="contract.status === 'draft'" @click="confirmStatusChange('active')" class="btn-success btn-sm">Активировать</button>
+          <div v-if="auth.userRole === 'lease_manager'" class="flex flex-col items-end gap-1">
+            <div class="flex gap-2">
+            <button
+              v-if="contract.status === 'draft'"
+              type="button"
+              :disabled="leaseActivationBlocked"
+              :title="leaseActivationBlocked ? 'Сначала завершите договор купли-продажи (ДКП) по этой сделке' : ''"
+              @click="confirmStatusChange('active')"
+              :class="['btn-success btn-sm', leaseActivationBlocked ? 'opacity-50 cursor-not-allowed' : '']"
+            >Активировать</button>
             <button v-if="contract.status === 'active'" @click="confirmStatusChange('completed')" class="btn-secondary btn-sm">Завершить</button>
             <button v-if="contract.status === 'active' && contract.contract_type === 'lease'" @click="confirmGenerateSchedule" class="btn-primary btn-sm">Сформировать график</button>
+            </div>
+            <p v-if="leaseActivationBlocked" class="text-xs text-amber-700 text-right max-w-xs">
+              Активация лизинга доступна после статуса «Завершён» у договора ДКП.
+            </p>
           </div>
         </div>
 
@@ -76,7 +97,21 @@
             <p v-else class="text-sm font-medium text-gray-800">{{ contract.currency || 'Не указана' }}</p>
           </div>
 
-          <!-- Supplier-editable fields -->
+          <template v-if="contract.contract_type === 'lease' && contract.linked_purchase_contract_id">
+            <div class="md:col-span-2 lg:col-span-3">
+              <p class="text-xs text-gray-500 mb-3">
+                Данные из ДКП
+                <a
+                  href="#"
+                  class="text-primary-600 hover:underline cursor-pointer"
+                  @click.prevent="goToContract(contract.linked_purchase_contract_id)"
+                >
+                  {{ contract.linked_purchase_contract_number }}
+                </a>
+              </p>
+            </div>
+          </template>
+          <!-- Supplier-editable fields (ДКП) / только просмотр (лизинг) -->
           <div>
             <label class="label">Номер техпаспорта</label>
             <input v-if="canEditSupplierFields" v-model="fields.tech_passport_number" type="text" class="input-field" />
@@ -223,13 +258,13 @@
           </div>
         </div>
       </div>
-    </template>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -238,6 +273,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()
 
@@ -280,11 +316,25 @@ const canConfirm = computed(() => {
   return false
 })
 
-onMounted(async () => {
+const leaseActivationBlocked = computed(() => {
+  const c = contract.value
+  if (!c || c.contract_type !== 'lease' || c.status !== 'draft') return false
+  return c.linked_purchase_status !== 'completed'
+})
+
+function goToContract(id) {
+  if (id == null) return
+  router.push({ name: 'contract-detail', params: { id: String(id) } })
+}
+
+async function loadContract() {
+  const id = route.params.id
+  if (!id) return
+  loading.value = true
   try {
     const [cRes, sRes] = await Promise.all([
-      leasingApi.getContract(route.params.id),
-      leasingApi.getSchedule(route.params.id),
+      leasingApi.getContract(id),
+      leasingApi.getSchedule(id),
     ])
     contract.value = cRes.data
     schedule.value = sRes.data
@@ -292,7 +342,9 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+watch(() => route.params.id, loadContract, { immediate: true })
 
 function syncFieldsFromContract() {
   const c = contract.value
