@@ -27,6 +27,7 @@ from app.models.notification import Notification
 from app.models.user import LeaseTerm, User, UserRole
 from app.models.vehicle import Vehicle
 from app.services.contract_document import (
+    contract_docx_filename,
     generate_la_document,
     generate_psa_document,
     upload_contract_document,
@@ -1003,11 +1004,13 @@ async def generate_documents(
     try:
         if contract.contract_type == ContractType.PURCHASE_SALE:
             buf = generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user)
-            url = upload_contract_document(buf, f"contracts/psa/{contract.id}", "contract.docx")
+            name = contract_docx_filename("ДКП", contract.contract_number, fallback_suffix=contract.id)
+            url = upload_contract_document(buf, f"contracts/psa/{contract.id}", name)
             contract.psa_doc_url = url
         elif contract.contract_type == ContractType.LEASE:
             buf = generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_user)
-            url = upload_contract_document(buf, f"contracts/la/{contract.id}", "contract.docx")
+            name = contract_docx_filename("ДЛ", contract.contract_number, fallback_suffix=contract.id)
+            url = upload_contract_document(buf, f"contracts/la/{contract.id}", name)
             contract.la_doc_url = url
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Шаблон документа не найден на сервере")

@@ -1,10 +1,12 @@
 """Generate DOCX contracts from Word templates by replacing [placeholder] markers."""
 
+import re
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 
 from docx import Document
+from lxml import etree
 
 from app.core.config import settings
 from app.services.storage import storage_service
@@ -228,6 +230,23 @@ def _passport_id(u) -> str:
     return ""
 
 
+def _to_initials(full_name: str) -> str:
+    """'Иванов Иван Сергеевич' → 'Иванов И. С.'"""
+    parts = full_name.strip().split()
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    surname = parts[0]
+    initials = " ".join(f"{p[0]}." for p in parts[1:] if p)
+    return f"{surname} {initials}"
+
+
+def _director_initials(u) -> str:
+    """Director/name in 'Фамилия И. О.' format."""
+    return _to_initials(_director_or_name(u))
+
+
 # ---------------------------------------------------------------------------
 # DOCX replacement engine
 # ---------------------------------------------------------------------------
@@ -412,6 +431,21 @@ def _build_la_supplier_line(supplier) -> str:
     return "___________"
 
 
+def _build_la_lessee_name_block(lessee) -> str:
+    """[103] — Лизингополучатель name block (no 'в лице директора…')."""
+    if not lessee:
+        return "___________"
+    if lessee.company:
+        lf = lessee.company.legal_form or ""
+        cn = lessee.company.company_name or ""
+        return f'{lf} "{cn}"'
+    if lessee.entrepreneur:
+        return f'ИП {lessee.entrepreneur.full_name or ""}'
+    if lessee.individual:
+        return f'Физическое лицо {lessee.individual.full_name or ""}'
+    return "___________"
+
+
 def _build_la_lessee_info_name(lessee) -> str:
     """Org-form + name for ИНФОРМАЦИЯ О ЛИЗИНГОПОЛУЧАТЕЛЕ block."""
     if not lessee:
@@ -517,7 +551,7 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
         "название банка поставщика": _safe(supplier_bank.bank_name if supplier_bank else None),
         "SWIFT поставщика": _safe(supplier_bank.swift if supplier_bank else None, ""),
         "BIC поставщика": _safe(supplier_bank.bic if supplier_bank else None, ""),
-        "ФИО директора поставщика": _director_or_name(supplier_user),
+        "ФИО директора поставщика": _director_initials(supplier_user),
         "номер телефона поставщика": _contact_phone(supplier_user),
         "электронная почта поставщика": _contact_email(supplier_user),
 
@@ -528,15 +562,20 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
         "название банка лизингодателя": _safe(lessor_bank.bank_name if lessor_bank else None),
         "SWIFT лизингодателя": _safe(lessor_bank.swift if lessor_bank else None, ""),
         "BIC лизингодателя": _safe(lessor_bank.bic if lessor_bank else None, ""),
-        "ФИО директора лизингодателя": _director_or_name(lessor_user),
+        "ФИО директора лизингодателя": _director_initials(lessor_user),
         "номер телефона лизингодателя": _contact_phone(lessor_user),
         "электронная почта лизингодателя": _contact_email(lessor_user),
 
         # Lessee
-        "ФИО директора лизингополучателя": _director_or_name(lessee_user),
+        "ФИО директора лизингополучателя": _director_initials(lessee_user),
+
+        # Conditional labels (#58, #59)
+        "Директор": "Директор" if (lessee_user and lessee_user.company) else "",
+        "Директор1": "Директор" if (supplier_user and supplier_user.company) else "",
     }
 
     _replace_in_doc(doc, repl)
+    _protect_document(doc)
 
     buf = BytesIO()
     doc.save(buf)
@@ -568,6 +607,7 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
         # Contextual blocks
         "101": _build_la_lessee_header(lessee_user),
         "102": _build_la_supplier_line(supplier_user),
+        "103": _build_la_lessee_name_block(lessee_user),
 
         # Contract
         "номер договора лизинга": _safe(contract.contract_number),
@@ -630,19 +670,21 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
         "сумма НДС от договора лизинга словами": _num_to_words(vat_on_total, currency),
 
         # Signatures
-        "ФИО лизингополучателя": _director_or_name(lessee_user),
+        "ФИО лизингополучателя": _director_initials(lessee_user),
+        "ФИО директора лизингодателя": _director_initials(lessor_user),
 
         # Bottom table: Лизингодатель
         "Организационно правовая форма лиздат": _legal_form(lessor_user),
         "Название компании": _user_name(lessor_user),
         "Название компании лиздат": _user_name(lessor_user),
-        "ФИО директора лиздат": _director_or_name(lessor_user),
+        "ФИО директора лиздат": _director_initials(lessor_user),
 
         # Bottom table: Лизингополучатель
-        "ФИО директора лизпоч": _director_or_name(lessee_user),
+        "ФИО директора лизпоч": _director_initials(lessee_user),
     }
 
     _replace_in_doc(doc, repl)
+    _protect_document(doc)
 
     buf = BytesIO()
     doc.save(buf)
@@ -651,12 +693,41 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
 
 
 # ---------------------------------------------------------------------------
+# Document protection (read-only)
+# ---------------------------------------------------------------------------
+
+_WORDPROCESSINGML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def _protect_document(doc: Document) -> None:
+    """Set document protection to readOnly — prevents editing in Word."""
+    settings_elem = doc.settings.element
+    ns = _WORDPROCESSINGML_NS
+    protection = settings_elem.find(f"{{{ns}}}documentProtection")
+    if protection is None:
+        protection = etree.SubElement(settings_elem, f"{{{ns}}}documentProtection")
+    protection.set(f"{{{ns}}}edit", "readOnly")
+    protection.set(f"{{{ns}}}enforcement", "1")
+
+
+# ---------------------------------------------------------------------------
 # Upload
 # ---------------------------------------------------------------------------
 
+def contract_docx_filename(prefix: str, contract_number: str | None, *, fallback_suffix: str | int | None = None) -> str:
+    """Имя .docx для объекта в хранилище и для скачивания (последний сегмент URL)."""
+    raw = (contract_number or "").strip()
+    safe = re.sub(r'[\\/:*?"<>|\r\n]+', "_", raw)
+    safe = safe.strip(" .")
+    if not safe:
+        safe = str(fallback_suffix) if fallback_suffix is not None else "без_номера"
+    return f"{prefix}_{safe}.docx"
+
+
 def upload_contract_document(buf: BytesIO, folder: str, filename: str) -> str:
-    object_name = f"{folder}/{filename}"
+    """Upload a protected DOCX to MinIO. Returns the URL."""
     data = buf.read()
+    object_name = f"{folder}/{filename}"
     storage_service.client.put_object(
         settings.MINIO_BUCKET,
         object_name,
