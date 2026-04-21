@@ -6,4 +6,7 @@ export const authApi = {
 
   register: (data) =>
     api.post('/auth/register', data),
+
+  forgotPassword: (email) =>
+    api.post('/auth/forgot-password', { email }),
 }

@@ -44,6 +44,8 @@ services:
       dockerfile: Dockerfile
     container_name: fleetlease-backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://fleetlease:fleetlease_secret@db:5432/fleetlease
       DATABASE_URL_SYNC: postgresql://fleetlease:fleetlease_secret@db:5432/fleetlease

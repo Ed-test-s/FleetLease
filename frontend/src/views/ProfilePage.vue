@@ -101,6 +101,43 @@
         <button @click="updateProfile" class="btn-primary btn-sm mt-3">Сохранить</button>
       </div>
 
+      <!-- Password change -->
+      <div class="card p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-800 mb-3">Смена пароля</h3>
+        <div class="space-y-4 max-w-md">
+          <div>
+            <label class="label">Текущий пароль</label>
+            <input
+              v-model="passwordForm.current"
+              type="password"
+              class="input-field"
+              autocomplete="current-password"
+            />
+          </div>
+          <div>
+            <label class="label">Новый пароль</label>
+            <input
+              v-model="passwordForm.new"
+              type="password"
+              class="input-field"
+              autocomplete="new-password"
+              placeholder="Не менее 6 символов"
+            />
+          </div>
+          <div>
+            <label class="label">Подтверждение нового пароля</label>
+            <input
+              v-model="passwordForm.confirm"
+              type="password"
+              class="input-field"
+              autocomplete="new-password"
+            />
+          </div>
+          <p v-if="passwordError" class="text-sm text-red-600">{{ passwordError }}</p>
+          <button type="button" @click="submitPasswordChange" class="btn-primary btn-sm">Сменить пароль</button>
+        </div>
+      </div>
+
       <!-- Contacts -->
       <div class="card p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-800 mb-3">Контакты</h3>
@@ -253,6 +290,7 @@ import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 import { usersApi } from '@/api/users'
+import { formatApiError } from '@/utils/apiError'
 import { roleLabels, userTypeLabels, getRegistrationDate } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StarRating from '@/components/common/StarRating.vue'
@@ -270,6 +308,9 @@ const leaseTerms = ref({
   interest_rate: 12,
 })
 
+const passwordForm = ref({ current: '', new: '', confirm: '' })
+const passwordError = ref('')
+
 onMounted(() => {
   if (auth.user) {
     description.value = auth.user.description || ''
@@ -283,6 +324,30 @@ async function updateProfile() {
   await usersApi.updateMe({ description: description.value })
   await auth.fetchUser()
   notifStore.showToast('Профиль обновлён', 'success')
+}
+
+async function submitPasswordChange() {
+  passwordError.value = ''
+  const p = passwordForm.value
+  if (!p.current || !p.new) {
+    passwordError.value = 'Заполните текущий и новый пароль'
+    return
+  }
+  if (p.new.length < 6) {
+    passwordError.value = 'Новый пароль — не менее 6 символов'
+    return
+  }
+  if (p.new !== p.confirm) {
+    passwordError.value = 'Новый пароль и подтверждение не совпадают'
+    return
+  }
+  try {
+    await usersApi.changePassword({ current_password: p.current, new_password: p.new })
+    passwordForm.value = { current: '', new: '', confirm: '' }
+    notifStore.showToast('Пароль успешно изменён', 'success')
+  } catch (e) {
+    passwordError.value = formatApiError(e, 'Не удалось сменить пароль')
+  }
 }
 
 async function uploadAvatar(e) {

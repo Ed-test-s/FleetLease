@@ -24,6 +24,10 @@
         </button>
       </form>
 
+      <p class="text-center text-sm mt-4">
+        <router-link to="/forgot-password" class="text-primary-500 font-medium hover:underline">Забыли пароль?</router-link>
+      </p>
+
       <p class="text-center text-sm text-gray-500 mt-6">
         Нет аккаунта?
         <router-link to="/register" class="text-primary-500 font-medium hover:underline">Зарегистрироваться</router-link>

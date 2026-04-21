@@ -31,6 +31,18 @@ class Settings(BaseSettings):
 
     VAT_RATE_PERCENT: float = 20.0
 
+    # SMTP (fastapi-mail). Если MAIL_SERVER пуст — отправка почты недоступна (503 на forgot-password).
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
+    MAIL_FROM: str = ""
+    MAIL_FROM_NAME: str = "FleetLease"
+    MAIL_SERVER: str = ""
+    MAIL_PORT: int = 587
+    MAIL_STARTTLS: bool = True
+    MAIL_SSL_TLS: bool = False
+    MAIL_USE_CREDENTIALS: bool = True
+    MAIL_VALIDATE_CERTS: bool = True
+
     class Config:
         env_file = ".env"
         case_sensitive = True

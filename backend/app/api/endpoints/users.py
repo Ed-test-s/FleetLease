@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_role
 from app.core.database import get_db
+from app.core.security import hash_password, verify_password
 from app.models.review import Review
 from app.models.user import (
     BankAccount,
@@ -20,10 +21,12 @@ from app.models.user import (
 from app.schemas.user import (
     BankAccountCreate,
     BankAccountOut,
+    ChangePasswordRequest,
     ContactCreate,
     ContactOut,
     LeaseTermCreate,
     LeaseTermOut,
+    MessageResponse,
     UserOut,
     UserPublicOut,
     UserUpdate,
@@ -67,6 +70,20 @@ async def update_me(
     out.rating = rating
     out.reviews_count = count
     return out
+
+
+@router.patch("/me/password", response_model=MessageResponse)
+async def change_password(
+    data: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(data.current_password, user.password_hash):
+        # 400, не 401: иначе клиентский перехватчик сочтёт сессию недействительной.
+        raise HTTPException(status_code=400, detail="Неверный текущий пароль")
+    user.password_hash = hash_password(data.new_password)
+    await db.flush()
+    return MessageResponse(message="Пароль успешно изменён")
 
 
 @router.post("/me/avatar", response_model=UserOut)

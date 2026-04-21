@@ -1,5 +1,8 @@
+import logging
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -7,6 +10,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import (
     Company,
+    ContactType,
     Entrepreneur,
     Individual,
     User,
@@ -14,7 +18,17 @@ from app.models.user import (
     UserRole,
     UserType,
 )
-from app.schemas.user import TokenResponse, UserOut, UserRegister, LoginRequest
+from app.schemas.user import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    MessageResponse,
+    TokenResponse,
+    UserOut,
+    UserRegister,
+)
+from app.services.mail import is_mail_configured, send_temporary_password_email
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -89,3 +103,49 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     token = create_access_token({"sub": str(user.id), "role": user.role.value})
     return TokenResponse(access_token=token)
+
+
+_FORGOT_PASSWORD_MESSAGE = (
+    "Если для этого адреса есть учётная запись, на указанный email отправлено письмо с временным паролем."
+)
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Восстановление доступа: временный пароль на email из контактов пользователя."""
+    if not is_mail_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Отправка почты не настроена на сервере. Обратитесь к администратору.",
+        )
+
+    email_norm = data.email.strip().lower()
+    result = await db.execute(
+        select(User)
+        .join(UserContact, User.id == UserContact.user_id)
+        .where(
+            UserContact.type == ContactType.EMAIL,
+            func.lower(UserContact.value) == email_norm,
+            User.is_active.is_(True),
+        )
+        .limit(1)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        return MessageResponse(message=_FORGOT_PASSWORD_MESSAGE)
+
+    temp_password = secrets.token_urlsafe(16)
+    user.password_hash = hash_password(temp_password)
+    await db.flush()
+
+    try:
+        await send_temporary_password_email(data.email.strip(), temp_password)
+    except Exception:
+        logger.exception("forgot-password: не удалось отправить письмо через SMTP")
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось отправить письмо. Попробуйте позже или обратитесь к администратору.",
+        ) from None
+
+    return MessageResponse(message=_FORGOT_PASSWORD_MESSAGE)

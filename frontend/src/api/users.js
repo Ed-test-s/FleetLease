@@ -3,6 +3,7 @@ import api from './index'
 export const usersApi = {
   getMe: () => api.get('/users/me'),
   updateMe: (data) => api.patch('/users/me', data),
+  changePassword: (data) => api.patch('/users/me/password', data),
   uploadAvatar: (file) => {
     const fd = new FormData()
     fd.append('file', file)

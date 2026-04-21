@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import re
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models.user import ContactType, UserRole, UserType
 
@@ -16,6 +16,26 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=6)
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Новый пароль не может быть пустым")
+        return v
 
 
 # ── Contacts ──────────────────────────────────────────────────────────
