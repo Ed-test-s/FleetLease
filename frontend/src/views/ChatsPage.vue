@@ -25,7 +25,7 @@
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-gray-900 truncate">{{ c.partner?.display_name || `Чат #${c.id}` }}</span>
             <span class="badge text-[10px]" :class="c.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">
-              {{ c.chat_type === 'request' ? 'Заявка' : 'Поставщик' }}
+              {{ chatTypeBadge(c) }}
             </span>
           </div>
           <p v-if="c.vehicle_name" class="text-xs text-primary-500 truncate mt-0.5">Предмет: {{ c.vehicle_name }}</p>
@@ -70,5 +70,16 @@ function partnerInitial(c) {
   const name = c.partner?.display_name || ''
   if (name) return name.charAt(0).toUpperCase()
   return c.chat_type === 'request' ? 'Л' : 'П'
+}
+
+function chatTypeBadge(c) {
+  if (c.chat_type === 'request') {
+    return c.request_id != null ? `Заявка #${c.request_id}` : 'Заявка'
+  }
+  // Тип «supplier» в БД — чат по закупке; «Поставщик» для самого поставщика выглядит как ярлык на нём, а не на теме чата.
+  if (auth.userRole === 'supplier') {
+    return c.supplier_request_id != null ? `Заявка на покупку #${c.supplier_request_id}` : 'Закупка'
+  }
+  return c.supplier_request_id != null ? `Заявка на покупку #${c.supplier_request_id}` : 'Поставщик'
 }
 </script>

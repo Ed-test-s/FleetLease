@@ -17,7 +17,7 @@
       </div>
       <h1 v-else class="text-lg font-bold text-gray-900">Чат #{{ route.params.id }}</h1>
       <span v-if="chat" class="badge text-[10px] flex-shrink-0" :class="chat.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">
-        {{ chat?.chat_type === 'request' ? 'Заявка' : 'Поставщик' }}
+        {{ chatTypeBadge }}
       </span>
 
       <router-link v-if="chat?.contract_id" :to="`/contracts/${chat.contract_id}`" class="ml-auto btn-secondary btn-sm">
@@ -70,6 +70,18 @@ let ws = null
 const chatPartnerInitial = computed(() => {
   const n = chat.value?.partner?.display_name
   return n ? n.charAt(0).toUpperCase() : '?'
+})
+
+const chatTypeBadge = computed(() => {
+  const c = chat.value
+  if (!c) return ''
+  if (c.chat_type === 'request') {
+    return c.request_id != null ? `Заявка #${c.request_id}` : 'Заявка'
+  }
+  if (auth.userRole === 'supplier') {
+    return c.supplier_request_id != null ? `Закупка #${c.supplier_request_id}` : 'Закупка'
+  }
+  return c.supplier_request_id != null ? `Поставщик #${c.supplier_request_id}` : 'Поставщик'
 })
 
 onMounted(async () => {
