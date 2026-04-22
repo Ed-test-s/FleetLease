@@ -17,7 +17,7 @@ def bank_account_row_is_complete(ba: BankAccount) -> bool:
         return False
     if not nz(ba.bank_address):
         return False
-    if not (nz(ba.bic) or nz(ba.swift)):
+    if not nz(ba.swift):
         return False
     return True
 
@@ -31,7 +31,7 @@ async def user_has_usable_bank_requisites(db: AsyncSession, user_id: int) -> boo
 async def ensure_user_has_bank_requisites(
     db: AsyncSession,
     user_id: int,
-    detail: str = "Добавьте в профиль хотя бы один банковский счёт с полными реквизитами (IBAN, название и адрес банка, BIC или SWIFT).",
+    detail: str = "Добавьте в профиль хотя бы один банковский счёт с полными реквизитами (IBAN, название и адрес банка, SWIFT).",
 ) -> None:
     if not await user_has_usable_bank_requisites(db, user_id):
         raise HTTPException(status_code=400, detail=detail)

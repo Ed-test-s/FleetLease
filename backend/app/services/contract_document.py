@@ -550,7 +550,6 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
         "IBAN поставщика": _safe(supplier_bank.iban if supplier_bank else None),
         "название банка поставщика": _safe(supplier_bank.bank_name if supplier_bank else None),
         "SWIFT поставщика": _safe(supplier_bank.swift if supplier_bank else None, ""),
-        "BIC поставщика": _safe(supplier_bank.bic if supplier_bank else None, ""),
         "ФИО директора поставщика": _director_initials(supplier_user),
         "номер телефона поставщика": _contact_phone(supplier_user),
         "электронная почта поставщика": _contact_email(supplier_user),
@@ -561,7 +560,6 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
         "IBAN лизингодателя": _safe(lessor_bank.iban if lessor_bank else None),
         "название банка лизингодателя": _safe(lessor_bank.bank_name if lessor_bank else None),
         "SWIFT лизингодателя": _safe(lessor_bank.swift if lessor_bank else None, ""),
-        "BIC лизингодателя": _safe(lessor_bank.bic if lessor_bank else None, ""),
         "ФИО директора лизингодателя": _director_initials(lessor_user),
         "номер телефона лизингодателя": _contact_phone(lessor_user),
         "электронная почта лизингодателя": _contact_email(lessor_user),
@@ -629,7 +627,6 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
         "электронная почта лизингодателя": _contact_email(lessor_user),
         "IBAN лиздат": _safe(lessor_bank.iban if lessor_bank else None),
         "название банка лиздат": _safe(lessor_bank.bank_name if lessor_bank else None),
-        "BIC лиздат": _safe(lessor_bank.bic if lessor_bank else None, ""),
         "SWIFT лиздат": _safe(lessor_bank.swift if lessor_bank else None, ""),
 
         # Lessee info block (adapt org form for IE/individual)
@@ -645,7 +642,6 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
         "электронная почта лизингополучателя": _contact_email(lessee_user),
         "IBAN лизполуч": _safe(lessee_bank.iban if lessee_bank else None),
         "название банка лизполуч": _safe(lessee_bank.bank_name if lessee_bank else None),
-        "BIC лизполуч": _safe(lessee_bank.bic if lessee_bank else None, ""),
         "SWIFT лизполуч": _safe(lessee_bank.swift if lessee_bank else None, ""),
 
         # Vehicle

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
@@ -62,7 +60,10 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --reload-dir /app
+    command: >
+      sh -lc "cd /app &&
+      PYTHONPATH=/app alembic upgrade head &&
+      uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --reload-dir /app"
 
   frontend:
     build:

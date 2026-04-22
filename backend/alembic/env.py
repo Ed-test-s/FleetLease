@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -14,8 +15,17 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _get_sqlalchemy_config() -> dict:
+    """Из docker-compose в контейнере backend задан DATABASE_URL_SYNC (@db:5432); alembic.ini указывает localhost."""
+    section = config.get_section(config.config_ini_section, {}) or {}
+    url = os.environ.get("DATABASE_URL_SYNC")
+    if url:
+        return {**section, "sqlalchemy.url": url}
+    return section
+
+
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
+    url = os.environ.get("DATABASE_URL_SYNC") or config.get_main_option("sqlalchemy.url")
     context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction():
         context.run_migrations()
@@ -23,7 +33,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        _get_sqlalchemy_config(),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

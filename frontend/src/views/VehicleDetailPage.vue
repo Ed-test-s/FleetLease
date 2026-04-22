@@ -430,7 +430,7 @@ watch(showLessorModal, async (val) => {
 })
 
 const bankRequiredMsg =
-  'Укажите в профиле хотя бы один банковский счёт: IBAN, название и адрес отделения банка, BIC или SWIFT.'
+  'Укажите в профиле хотя бы один банковский счёт: IBAN, название и адрес отделения банка, SWIFT.'
 
 function openLeaseRequestFlow() {
   if (!hasBankRequisites(auth.user)) {

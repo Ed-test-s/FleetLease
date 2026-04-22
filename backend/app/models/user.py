@@ -121,8 +121,7 @@ class BankAccount(Base):
     iban: Mapped[str | None] = mapped_column(String(34), nullable=True)
     bank_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     bank_address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    swift: Mapped[str | None] = mapped_column(String(11), nullable=True)
-    bic: Mapped[str | None] = mapped_column(String(11), nullable=True)
+    swift: Mapped[str] = mapped_column(String(11), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="bank_accounts")
 

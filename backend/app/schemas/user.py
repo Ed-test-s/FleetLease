@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import re
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.user import ContactType, UserRole, UserType
 
@@ -103,10 +103,9 @@ class BankAccountCreate(BaseModel):
     iban: str
     bank_name: str
     bank_address: str
-    swift: str | None = None
-    bic: str | None = None
+    swift: str
 
-    @field_validator("iban", "bank_name", "bank_address", mode="before")
+    @field_validator("iban", "bank_name", "bank_address", "swift", mode="before")
     @classmethod
     def _strip_required(cls, v: object) -> str:
         if v is None:
@@ -116,30 +115,16 @@ class BankAccountCreate(BaseModel):
             raise ValueError("Поле обязательно")
         return s
 
-    @field_validator("swift", "bic", mode="before")
-    @classmethod
-    def _strip_optional(cls, v: object) -> str | None:
-        if v is None:
-            return None
-        s = str(v).strip()
-        return s if s else None
-
-    @field_validator("iban", "swift", "bic")
+    @field_validator("iban", "swift")
     @classmethod
     def _latin_digits_only(cls, v: str | None) -> str | None:
         if v is None or v == "":
             return v
         if not _BANK_CODE_RE.fullmatch(v):
             raise ValueError(
-                "Поля IBAN, BIC и SWIFT: только латинские буквы и цифры, без пробелов"
+                "Поля IBAN и SWIFT: только латинские буквы и цифры, без пробелов"
             )
         return v
-
-    @model_validator(mode="after")
-    def _bic_or_swift(self) -> "BankAccountCreate":
-        if not self.bic and not self.swift:
-            raise ValueError("Укажите BIC или SWIFT (обязателен минимум один код).")
-        return self
 
 
 class BankAccountOut(BaseModel):
@@ -148,7 +133,6 @@ class BankAccountOut(BaseModel):
     bank_name: str | None = None
     bank_address: str | None = None
     swift: str | None = None
-    bic: str | None = None
 
     model_config = {"from_attributes": True}
 

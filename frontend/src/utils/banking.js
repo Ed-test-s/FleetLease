@@ -1,6 +1,6 @@
 /**
  * Счёт считается полным для участия в сделках (как на бэкенде):
- * IBAN, название банка, адрес отделения, и минимум один из BIC/SWIFT.
+ * IBAN, название банка, адрес отделения и SWIFT.
  */
 export function hasBankRequisites(user) {
   const list = user?.bank_accounts || []
@@ -10,6 +10,6 @@ export function hasBankRequisites(user) {
       nz(a.iban) &&
       nz(a.bank_name) &&
       nz(a.bank_address) &&
-      (nz(a.bic) || nz(a.swift)),
+      nz(a.swift),
   )
 }

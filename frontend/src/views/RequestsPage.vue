@@ -176,7 +176,7 @@ async function updateLeaseStatus(id, status) {
 }
 
 const bankRequiredMsg =
-  'Укажите в профиле полные банковские реквизиты (IBAN, банк, адрес отделения, BIC или SWIFT).'
+  'Укажите в профиле полные банковские реквизиты (IBAN, банк, адрес отделения, SWIFT).'
 
 async function approveRequest(r) {
   if (!hasBankRequisites(auth.user)) {
