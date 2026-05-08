@@ -21,6 +21,7 @@
             <router-link to="/" class="text-sm text-gray-500 hover:text-primary-500 transition-colors">Каталог техники</router-link>
             <router-link to="/suppliers" class="text-sm text-gray-500 hover:text-primary-500 transition-colors">Поставщики</router-link>
             <router-link to="/lessors" class="text-sm text-gray-500 hover:text-primary-500 transition-colors">Лизингодатели</router-link>
+            <router-link to="/about" class="text-sm text-gray-500 hover:text-primary-500 transition-colors">О компании</router-link>
           </div>
         </div>
         <div>

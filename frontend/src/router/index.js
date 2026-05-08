@@ -36,6 +36,11 @@ const routes = [
     component: () => import('@/views/TermsOfUsePage.vue'),
   },
   {
+    path: '/about',
+    name: 'about-company',
+    component: () => import('@/views/AboutCompanyPage.vue'),
+  },
+  {
     path: '/vehicles/:id',
     name: 'vehicle-detail',
     component: () => import('@/views/VehicleDetailPage.vue'),

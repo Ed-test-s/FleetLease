@@ -31,6 +31,7 @@ class StorageService:
     def __init__(self):
         self._client: Minio | None = None
         self._policy_set = False
+        self._about_bucket_ready = False
 
     @property
     def client(self) -> Minio:
@@ -53,6 +54,18 @@ class StorageService:
                     pass
                 self._policy_set = True
         return self._client
+
+    def _ensure_about_bucket(self) -> None:
+        if self._about_bucket_ready:
+            return
+        bucket = settings.MINIO_ABOUT_BUCKET
+        if not self.client.bucket_exists(bucket):
+            self.client.make_bucket(bucket)
+        try:
+            self.client.set_bucket_policy(bucket, _public_read_policy(bucket))
+        except S3Error:
+            pass
+        self._about_bucket_ready = True
 
     def _object_key_from_public_url(self, url: str | None) -> str | None:
         if not url:
@@ -77,6 +90,29 @@ class StorageService:
         except S3Error:
             pass
 
+    def _object_key_from_about_public_url(self, url: str | None) -> str | None:
+        if not url:
+            return None
+        parsed = urlparse(url)
+        path = parsed.path.strip("/")
+        prefix = f"{settings.MINIO_ABOUT_BUCKET}/"
+        if path.startswith(prefix):
+            return path[len(prefix) :]
+        if "/" in path:
+            parts = path.split("/", 1)
+            if parts[0] == settings.MINIO_ABOUT_BUCKET:
+                return parts[1]
+        return None
+
+    def remove_about_object_by_url(self, url: str | None) -> None:
+        key = self._object_key_from_about_public_url(url)
+        if not key:
+            return
+        try:
+            self.client.remove_object(settings.MINIO_ABOUT_BUCKET, key)
+        except S3Error:
+            pass
+
     async def upload_file(self, file: UploadFile, folder: str = "uploads") -> str:
         ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "bin"
         ext = re.sub(r"[^a-zA-Z0-9]", "", ext) or "bin"
@@ -91,6 +127,22 @@ class StorageService:
             content_type=file.content_type or "application/octet-stream",
         )
         return f"http://{settings.MINIO_EXTERNAL_ENDPOINT}/{settings.MINIO_BUCKET}/{object_name}"
+
+    async def upload_about_file(self, file: UploadFile, folder: str = "images") -> str:
+        self._ensure_about_bucket()
+        ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "bin"
+        ext = re.sub(r"[^a-zA-Z0-9]", "", ext) or "bin"
+        object_name = f"{folder}/{uuid.uuid4().hex}.{ext}"
+
+        data = await file.read()
+        self.client.put_object(
+            settings.MINIO_ABOUT_BUCKET,
+            object_name,
+            BytesIO(data),
+            length=len(data),
+            content_type=file.content_type or "application/octet-stream",
+        )
+        return f"http://{settings.MINIO_EXTERNAL_ENDPOINT}/{settings.MINIO_ABOUT_BUCKET}/{object_name}"
 
 
 storage_service = StorageService()

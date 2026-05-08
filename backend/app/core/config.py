@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin123"
     MINIO_BUCKET: str = "fleetlease"
+    MINIO_ABOUT_BUCKET: str = "about-site"
     MINIO_SECURE: bool = False
     MINIO_EXTERNAL_ENDPOINT: str = "localhost:9000"
 
