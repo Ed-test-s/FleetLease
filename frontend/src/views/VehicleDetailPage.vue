@@ -10,9 +10,13 @@
         <!-- Images -->
         <div class="lg:col-span-3">
           <div class="card overflow-hidden">
-            <div class="aspect-[16/10] bg-surface-100">
+            <div
+              class="aspect-[16/10] bg-surface-100"
+              :class="{ 'cursor-pointer select-none': vehicle.images?.length > 1 }"
+              @click="onMainImageAreaClick"
+            >
               <img v-if="vehicle.images?.length" :src="vehicle.images[selectedImage].image_url" :alt="vehicle.name"
-                   class="w-full h-full object-cover" />
+                   class="w-full h-full object-cover pointer-events-none" />
               <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
                 <svg class="w-20 h-20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5" />
@@ -387,7 +391,24 @@ function initRequestForm() {
   }
 }
 
-onMounted(async () => {
+function onMainImageAreaClick(event) {
+  const imgs = vehicle.value?.images
+  if (!imgs || imgs.length <= 1) return
+  const el = event.currentTarget
+  if (!(el instanceof HTMLElement)) return
+  const rect = el.getBoundingClientRect()
+  const mid = rect.left + rect.width / 2
+  const n = imgs.length
+  if (event.clientX < mid) {
+    selectedImage.value = (selectedImage.value - 1 + n) % n
+  } else {
+    selectedImage.value = (selectedImage.value + 1) % n
+  }
+}
+
+async function loadVehicle() {
+  loading.value = true
+  selectedImage.value = 0
   try {
     const [vehicleRes, ratesRes] = await Promise.allSettled([
       vehiclesApi.get(route.params.id),
@@ -406,6 +427,14 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  loadVehicle()
+})
+
+watch(() => route.params.id, () => {
+  loadVehicle()
 })
 
 watch(showPurchaseModal, async (val) => {
