@@ -32,8 +32,16 @@
           </div>
         </div>
       </div>
-      <div class="border-t border-surface-200 mt-8 pt-6 text-center text-xs text-gray-400">
-        &copy; {{ new Date().getFullYear() }} FleetLease. Все права защищены.
+      <div class="border-t border-surface-200 mt-8 pt-6 flex flex-col items-center gap-3 text-xs text-gray-400">
+        <div class="flex flex-wrap justify-center gap-x-4 gap-y-1">
+          <router-link to="/privacy" class="text-gray-500 hover:text-primary-500 transition-colors">
+            Политика конфиденциальности
+          </router-link>
+          <router-link to="/terms" class="text-gray-500 hover:text-primary-500 transition-colors">
+            Условия пользования
+          </router-link>
+        </div>
+        <span>&copy; {{ new Date().getFullYear() }} FleetLease. Все права защищены.</span>
       </div>
     </div>
   </footer>

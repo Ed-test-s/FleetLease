@@ -26,6 +26,16 @@ const routes = [
     meta: { guest: true },
   },
   {
+    path: '/privacy',
+    name: 'privacy-policy',
+    component: () => import('@/views/PrivacyPolicyPage.vue'),
+  },
+  {
+    path: '/terms',
+    name: 'terms-of-use',
+    component: () => import('@/views/TermsOfUsePage.vue'),
+  },
+  {
     path: '/vehicles/:id',
     name: 'vehicle-detail',
     component: () => import('@/views/VehicleDetailPage.vue'),

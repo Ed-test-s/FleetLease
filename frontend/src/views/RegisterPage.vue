@@ -177,6 +177,49 @@
           </div>
         </template>
 
+        <div class="space-y-4 rounded-lg border border-surface-200 bg-surface-50 p-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Согласие на обработку данных</p>
+          <div class="flex gap-3 items-start">
+            <input
+              id="consent-personal-data"
+              v-model="consentPersonalData"
+              type="checkbox"
+              class="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+            />
+            <label for="consent-personal-data" class="text-sm text-gray-700 leading-snug cursor-pointer">
+              Я даю согласие на обработку персональных данных в соответствии с
+              <router-link to="/privacy" class="text-primary-500 font-medium hover:underline" @click.stop>
+                Политикой конфиденциальности
+              </router-link>.
+            </label>
+          </div>
+          <p v-if="consentTouched && !consentPersonalData" class="text-xs text-red-600 -mt-2 ml-7">
+            Необходимо согласие на обработку персональных данных.
+          </p>
+
+          <div class="flex gap-3 items-start">
+            <input
+              id="consent-legal-docs"
+              v-model="consentLegalDocs"
+              type="checkbox"
+              class="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+            />
+            <label for="consent-legal-docs" class="text-sm text-gray-700 leading-snug cursor-pointer">
+              Я ознакомлен и согласен с
+              <router-link to="/privacy" class="text-primary-500 font-medium hover:underline" @click.stop>
+                Политикой конфиденциальности
+              </router-link>
+              и
+              <router-link to="/terms" class="text-primary-500 font-medium hover:underline" @click.stop>
+                Условиями пользования
+              </router-link>.
+            </label>
+          </div>
+          <p v-if="consentTouched && !consentLegalDocs" class="text-xs text-red-600 -mt-2 ml-7">
+            Необходимо принять Политику конфиденциальности и Условия пользования.
+          </p>
+        </div>
+
         <p v-if="error" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{{ error }}</p>
 
         <button type="submit" :disabled="loading || hasErrors" class="btn-primary w-full">
@@ -220,6 +263,9 @@ const company = ref({ company_name: '', legal_form: '', unp: '', okpo: '', legal
 const error = ref('')
 const loading = ref(false)
 const touched = ref({})
+const consentPersonalData = ref(false)
+const consentLegalDocs = ref(false)
+const consentTouched = ref(false)
 
 watch(() => form.value.role, (val) => {
   if (val === 'lease_manager') form.value.user_type = 'company'
@@ -281,7 +327,9 @@ const hasErrors = computed(() =>
 
 async function handleRegister() {
   Object.keys(validators).forEach(k => (touched.value[k] = true))
+  consentTouched.value = true
   if (hasErrors.value) return
+  if (!consentPersonalData.value || !consentLegalDocs.value) return
 
   error.value = ''
   loading.value = true
