@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
+  // Модификаторы badge-* задаются в main.css и подставляются в StatusBadge динамически —
+  // без safelist Tailwind удалит их из production CSS как «неиспользуемые».
+  safelist: [{ pattern: /^badge-/ }],
   theme: {
     extend: {
       colors: {
