@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import { usersApi } from '@/api/users'
+import { useFavoritesStore } from '@/stores/favorites'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -34,6 +35,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data } = await usersApi.getMe()
       user.value = data
+      if (data.role === 'client') {
+        const favStore = useFavoritesStore()
+        favStore.fetchIds()
+      }
     } catch {
       logout()
     }
@@ -43,6 +48,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     user.value = null
     localStorage.removeItem('token')
+    const favStore = useFavoritesStore()
+    favStore.clear()
   }
 
   return { user, token, isAuthenticated, userRole, userName, login, register, fetchUser, logout }

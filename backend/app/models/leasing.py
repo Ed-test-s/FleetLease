@@ -131,6 +131,10 @@ class Contract(Base):
     tech_passport_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
 
+    lessor_bank_account_id: Mapped[int | None] = mapped_column(ForeignKey("bank_accounts.id"), nullable=True)
+    lessee_bank_account_id: Mapped[int | None] = mapped_column(ForeignKey("bank_accounts.id"), nullable=True)
+    supplier_bank_account_id: Mapped[int | None] = mapped_column(ForeignKey("bank_accounts.id"), nullable=True)
+
     lessee_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     lessor_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     supplier_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)

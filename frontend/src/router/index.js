@@ -46,6 +46,12 @@ const routes = [
     component: () => import('@/views/VehicleDetailPage.vue'),
   },
   {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('@/views/FavoritesPage.vue'),
+    meta: { auth: true, roles: ['client'] },
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfilePage.vue'),

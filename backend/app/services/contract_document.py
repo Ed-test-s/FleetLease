@@ -224,6 +224,17 @@ def _first_bank(u):
     return u.bank_accounts[0] if u and u.bank_accounts else None
 
 
+def _get_bank_by_id(u, bank_account_id):
+    """Get a specific bank account by id from user's accounts, fallback to first."""
+    if not u or not u.bank_accounts:
+        return None
+    if bank_account_id:
+        for ba in u.bank_accounts:
+            if ba.id == bank_account_id:
+                return ba
+    return u.bank_accounts[0] if u.bank_accounts else None
+
+
 def _passport_id(u) -> str:
     if u and u.individual:
         return u.individual.passport_id or ""
@@ -465,7 +476,8 @@ def _build_la_lessee_info_name(lessee) -> str:
 # PSA document generation
 # ---------------------------------------------------------------------------
 
-def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user) -> BytesIO:
+def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user,
+                          lessor_bank_account_id=None, supplier_bank_account_id=None) -> BytesIO:
     doc = Document(str(PSA_TEMPLATE))
 
     vat_rate = contract.vat_rate or 20
@@ -488,8 +500,8 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
     warranty_used = ("Продавец не несет ответственности за скрытые недостатки товара "
                      "в связи с тем, что товар является бывшим в эксплуатации.")
 
-    supplier_bank = _first_bank(supplier_user)
-    lessor_bank = _first_bank(lessor_user)
+    supplier_bank = _get_bank_by_id(supplier_user, supplier_bank_account_id)
+    lessor_bank = _get_bank_by_id(lessor_user, lessor_bank_account_id)
 
     repl: dict[str, str] = {
         # Contextual blocks [1]…[9]
@@ -585,7 +597,8 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
 # LA document generation
 # ---------------------------------------------------------------------------
 
-def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_user=None) -> BytesIO:
+def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_user=None,
+                         lessor_bank_account_id=None, lessee_bank_account_id=None) -> BytesIO:
     doc = Document(str(LA_TEMPLATE))
 
     vat_rate = contract.vat_rate or 20
@@ -598,8 +611,8 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
 
     condition = "Новый" if (vehicle and vehicle.condition == "new") else "Б/у"
 
-    lessor_bank = _first_bank(lessor_user)
-    lessee_bank = _first_bank(lessee_user)
+    lessor_bank = _get_bank_by_id(lessor_user, lessor_bank_account_id)
+    lessee_bank = _get_bank_by_id(lessee_user, lessee_bank_account_id)
 
     repl: dict[str, str] = {
         # Contextual blocks

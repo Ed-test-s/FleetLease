@@ -209,7 +209,7 @@
         <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <router-link v-for="v in vehicles" :key="v.id" :to="`/vehicles/${v.id}`"
                        class="card overflow-hidden hover:shadow-md transition-shadow group">
-            <div class="aspect-[16/10] bg-surface-100 overflow-hidden">
+            <div class="aspect-[16/10] bg-surface-100 overflow-hidden relative">
               <img v-if="v.images?.length" :src="v.images[0].image_url" :alt="v.name"
                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
               <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
@@ -217,6 +217,16 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5" />
                 </svg>
               </div>
+              <button
+                v-if="auth.isAuthenticated && auth.userRole === 'client'"
+                @click.prevent="favStore.toggle(v.id)"
+                class="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition-colors shadow-sm"
+              >
+                <svg class="w-5 h-5 transition-colors" :class="favStore.isFavorited(v.id) ? 'text-red-500 fill-red-500' : 'text-gray-400'"
+                     viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                </svg>
+              </button>
             </div>
             <div class="p-4">
               <h3 class="font-semibold text-gray-900 truncate">{{ v.name }}</h3>
@@ -249,8 +259,13 @@ import { ref, computed, onMounted } from 'vue'
 import { vehiclesApi } from '@/api/vehicles'
 import { referencesApi } from '@/api/references'
 import { formatPrice, formatMileage } from '@/utils/format'
+import { useAuthStore } from '@/stores/auth'
+import { useFavoritesStore } from '@/stores/favorites'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+
+const auth = useAuthStore()
+const favStore = useFavoritesStore()
 
 const vehicles = ref([])
 const loading = ref(true)

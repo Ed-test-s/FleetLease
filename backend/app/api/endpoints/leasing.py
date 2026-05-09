@@ -175,6 +175,34 @@ async def _contract_out(db: AsyncSession, contract: Contract) -> ContractOut:
         "supplier_label": user_display_name(umap.get(contract.supplier_id)) if contract.supplier_id else None,
     }
 
+    ba_ids = [
+        ba_id for ba_id in (
+            contract.lessor_bank_account_id,
+            contract.lessee_bank_account_id,
+            contract.supplier_bank_account_id,
+        ) if ba_id
+    ]
+    if ba_ids:
+        ba_res = await db.execute(select(BankAccount).where(BankAccount.id.in_(ba_ids)))
+        ba_map = {ba.id: ba for ba in ba_res.scalars().all()}
+    else:
+        ba_map = {}
+
+    def _ba_label(ba_id):
+        ba = ba_map.get(ba_id)
+        if not ba:
+            return None
+        parts = []
+        if ba.iban:
+            parts.append(ba.iban)
+        if ba.bank_name:
+            parts.append(f"({ba.bank_name})")
+        return " ".join(parts) if parts else ba.swift
+
+    extra["lessor_bank_account_label"] = _ba_label(contract.lessor_bank_account_id) if contract.lessor_bank_account_id else None
+    extra["lessee_bank_account_label"] = _ba_label(contract.lessee_bank_account_id) if contract.lessee_bank_account_id else None
+    extra["supplier_bank_account_label"] = _ba_label(contract.supplier_bank_account_id) if contract.supplier_bank_account_id else None
+
     if contract.request_id:
         if contract.contract_type == ContractType.LEASE:
             psa = await _psa_contract_for_request(db, contract.request_id)
@@ -715,6 +743,7 @@ async def update_contract_fields(
         raise HTTPException(status_code=400, detail="Все стороны уже подтвердили данные. Редактирование невозможно.")
 
     is_lessor = user.role in (UserRole.LEASE_MANAGER, UserRole.ADMIN) and contract.lessor_id == user.id
+    is_lessee = user.role == UserRole.CLIENT and contract.lessee_id == user.id
     is_supplier = (
         user.role == UserRole.SUPPLIER
         and contract.supplier_id == user.id
@@ -728,11 +757,33 @@ async def update_contract_fields(
             contract.signing_city = data.signing_city
         if data.currency is not None:
             contract.currency = data.currency
+        if data.bank_account_id is not None:
+            ba_res = await db.execute(
+                select(BankAccount).where(BankAccount.id == data.bank_account_id, BankAccount.user_id == user.id)
+            )
+            if not ba_res.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Банковский счёт не найден или не принадлежит вам")
+            contract.lessor_bank_account_id = data.bank_account_id
+    elif is_lessee:
+        if data.bank_account_id is not None:
+            ba_res = await db.execute(
+                select(BankAccount).where(BankAccount.id == data.bank_account_id, BankAccount.user_id == user.id)
+            )
+            if not ba_res.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Банковский счёт не найден или не принадлежит вам")
+            contract.lessee_bank_account_id = data.bank_account_id
     elif is_supplier:
         if data.tech_passport_number is not None:
             contract.tech_passport_number = data.tech_passport_number
         if data.tech_passport_date is not None:
             contract.tech_passport_date = data.tech_passport_date
+        if data.bank_account_id is not None:
+            ba_res = await db.execute(
+                select(BankAccount).where(BankAccount.id == data.bank_account_id, BankAccount.user_id == user.id)
+            )
+            if not ba_res.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Банковский счёт не найден или не принадлежит вам")
+            contract.supplier_bank_account_id = data.bank_account_id
         if contract.request_id:
             lease_res = await db.execute(
                 select(Contract).where(
@@ -778,10 +829,16 @@ async def confirm_contract(
     is_lease = contract.contract_type == ContractType.LEASE
 
     if user.id == contract.lessor_id:
+        if data.confirmed and not contract.lessor_bank_account_id:
+            raise HTTPException(status_code=400, detail="Укажите банковский счёт перед подтверждением")
         contract.lessor_confirmed = data.confirmed
     elif user.id == contract.lessee_id:
+        if data.confirmed and not contract.lessee_bank_account_id:
+            raise HTTPException(status_code=400, detail="Укажите банковский счёт перед подтверждением")
         contract.lessee_confirmed = data.confirmed
     elif user.id == contract.supplier_id and not is_lease:
+        if data.confirmed and not contract.supplier_bank_account_id:
+            raise HTTPException(status_code=400, detail="Укажите банковский счёт перед подтверждением")
         contract.supplier_confirmed = data.confirmed
     else:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -923,14 +980,24 @@ async def prepare_payment(
     if not ps:
         raise HTTPException(status_code=404, detail="Payment schedule item not found")
 
-    sender_ba = await db.execute(
-        select(BankAccount).where(BankAccount.user_id == contract.lessee_id)
-    )
+    if contract.lessee_bank_account_id:
+        sender_ba = await db.execute(
+            select(BankAccount).where(BankAccount.id == contract.lessee_bank_account_id)
+        )
+    else:
+        sender_ba = await db.execute(
+            select(BankAccount).where(BankAccount.user_id == contract.lessee_id)
+        )
     sender_bank = sender_ba.scalars().first()
 
-    receiver_ba = await db.execute(
-        select(BankAccount).where(BankAccount.user_id == contract.lessor_id)
-    )
+    if contract.lessor_bank_account_id:
+        receiver_ba = await db.execute(
+            select(BankAccount).where(BankAccount.id == contract.lessor_bank_account_id)
+        )
+    else:
+        receiver_ba = await db.execute(
+            select(BankAccount).where(BankAccount.user_id == contract.lessor_id)
+        )
     receiver_bank = receiver_ba.scalars().first()
 
     receiver_company = await db.execute(
@@ -1057,12 +1124,20 @@ async def generate_documents(
 
     try:
         if contract.contract_type == ContractType.PURCHASE_SALE:
-            buf = generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_user)
+            buf = generate_psa_document(
+                contract, vehicle, supplier_user, lessor_user, lessee_user,
+                lessor_bank_account_id=contract.lessor_bank_account_id,
+                supplier_bank_account_id=contract.supplier_bank_account_id,
+            )
             name = contract_docx_filename("ДКП", contract.contract_number, fallback_suffix=contract.id)
             url = upload_contract_document(buf, f"contracts/psa/{contract.id}", name)
             contract.psa_doc_url = url
         elif contract.contract_type == ContractType.LEASE:
-            buf = generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_user)
+            buf = generate_la_document(
+                contract, vehicle, lessor_user, lessee_user, supplier_user,
+                lessor_bank_account_id=contract.lessor_bank_account_id,
+                lessee_bank_account_id=contract.lessee_bank_account_id,
+            )
             name = contract_docx_filename("ДЛ", contract.contract_number, fallback_suffix=contract.id)
             url = upload_contract_document(buf, f"contracts/la/{contract.id}", name)
             contract.la_doc_url = url

@@ -50,7 +50,23 @@
 
             <button v-if="auth.isAuthenticated && auth.userRole === 'client'"
                     type="button"
-                    @click="openLeaseRequestFlow" class="btn-primary w-full mt-6">
+                    @click="favStore.toggle(vehicle.id)"
+                    :class="[
+                      'w-full mt-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border',
+                      favStore.isFavorited(vehicle.id)
+                        ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                        : 'bg-white border-surface-200 text-gray-700 hover:bg-surface-50'
+                    ]">
+              <svg class="w-5 h-5" :class="favStore.isFavorited(vehicle.id) ? 'fill-red-500 text-red-500' : 'text-gray-400'"
+                   viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+              </svg>
+              {{ favStore.isFavorited(vehicle.id) ? 'В избранном' : 'В избранное' }}
+            </button>
+
+            <button v-if="auth.isAuthenticated && auth.userRole === 'client'"
+                    type="button"
+                    @click="openLeaseRequestFlow" class="btn-primary w-full mt-3">
               Подать заявку на лизинг
             </button>
             <button v-else-if="auth.isAuthenticated && auth.userRole === 'lease_manager'"
@@ -287,6 +303,7 @@ import { usersApi } from '@/api/users'
 import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useFavoritesStore } from '@/stores/favorites'
 import { formatPrice, formatUsdAmount, formatMileage } from '@/utils/format'
 import { hasBankRequisites } from '@/utils/banking'
 import { exchangeRatesApi } from '@/api/exchangeRates'
@@ -302,6 +319,7 @@ function hasSpec(v) {
 const route = useRoute()
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()
+const favStore = useFavoritesStore()
 
 const vehicle = ref(null)
 const loading = ref(true)

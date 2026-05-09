@@ -108,6 +108,9 @@ class ContractOut(BaseModel):
     tech_passport_number: str | None = None
     tech_passport_date: date | None = None
     quantity: int = 1
+    lessor_bank_account_id: int | None = None
+    lessee_bank_account_id: int | None = None
+    supplier_bank_account_id: int | None = None
     lessee_confirmed: bool = False
     lessor_confirmed: bool = False
     supplier_confirmed: bool = False
@@ -120,6 +123,9 @@ class ContractOut(BaseModel):
     lessee_label: str | None = None
     lessor_label: str | None = None
     supplier_label: str | None = None
+    lessor_bank_account_label: str | None = None
+    lessee_bank_account_label: str | None = None
+    supplier_bank_account_label: str | None = None
     linked_purchase_contract_id: int | None = None
     linked_purchase_contract_number: str | None = None
     linked_purchase_status: ContractStatus | None = None
@@ -138,6 +144,7 @@ class ContractFieldsUpdate(BaseModel):
     currency: str | None = None
     tech_passport_number: str | None = None
     tech_passport_date: date | None = None
+    bank_account_id: int | None = None
 
 
 class ContractConfirmation(BaseModel):

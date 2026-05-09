@@ -134,7 +134,61 @@
           </div>
         </div>
 
-        <div v-if="canEditLessorFields || canEditSupplierFields" class="mt-4">
+        <!-- Bank account selection -->
+        <div class="border-t border-surface-200 mt-5 pt-5">
+          <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Банковские счета сторон</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Lessor bank account -->
+            <div>
+              <label class="label">Счёт лизингодателя</label>
+              <select v-if="canEditLessorFields && myBankAccounts.length"
+                      v-model="fields.lessor_bank_account_id" class="input-field">
+                <option :value="null">— Выберите счёт —</option>
+                <option v-for="ba in myBankAccounts" :key="ba.id" :value="ba.id">
+                  {{ ba.iban || ba.swift }} {{ ba.bank_name ? `(${ba.bank_name})` : '' }}
+                </option>
+              </select>
+              <p v-else-if="canEditLessorFields && !myBankAccounts.length" class="text-sm text-amber-600">
+                Нет банковских счетов. Добавьте в профиле.
+              </p>
+              <p v-else class="text-sm font-medium text-gray-800">{{ contract.lessor_bank_account_label || 'Не выбран' }}</p>
+            </div>
+
+            <!-- Lessee bank account -->
+            <div v-if="contract.lessee_id">
+              <label class="label">Счёт лизингополучателя</label>
+              <select v-if="canEditLesseeFields && myBankAccounts.length"
+                      v-model="fields.lessee_bank_account_id" class="input-field">
+                <option :value="null">— Выберите счёт —</option>
+                <option v-for="ba in myBankAccounts" :key="ba.id" :value="ba.id">
+                  {{ ba.iban || ba.swift }} {{ ba.bank_name ? `(${ba.bank_name})` : '' }}
+                </option>
+              </select>
+              <p v-else-if="canEditLesseeFields && !myBankAccounts.length" class="text-sm text-amber-600">
+                Нет банковских счетов. Добавьте в профиле.
+              </p>
+              <p v-else class="text-sm font-medium text-gray-800">{{ contract.lessee_bank_account_label || 'Не выбран' }}</p>
+            </div>
+
+            <!-- Supplier bank account (only for purchase_sale) -->
+            <div v-if="contract.supplier_id && contract.contract_type === 'purchase_sale'">
+              <label class="label">Счёт поставщика</label>
+              <select v-if="canEditSupplierFields && myBankAccounts.length"
+                      v-model="fields.supplier_bank_account_id" class="input-field">
+                <option :value="null">— Выберите счёт —</option>
+                <option v-for="ba in myBankAccounts" :key="ba.id" :value="ba.id">
+                  {{ ba.iban || ba.swift }} {{ ba.bank_name ? `(${ba.bank_name})` : '' }}
+                </option>
+              </select>
+              <p v-else-if="canEditSupplierFields && !myBankAccounts.length" class="text-sm text-amber-600">
+                Нет банковских счетов. Добавьте в профиле.
+              </p>
+              <p v-else class="text-sm font-medium text-gray-800">{{ contract.supplier_bank_account_label || 'Не выбран' }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="canEditLessorFields || canEditSupplierFields || canEditLesseeFields" class="mt-4">
           <button @click="saveFields" :disabled="savingFields" class="btn-primary btn-sm">
             {{ savingFields ? 'Сохранение...' : 'Сохранить изменения' }}
           </button>
@@ -289,6 +343,9 @@ const fields = ref({
   currency: 'BYN',
   tech_passport_number: '',
   tech_passport_date: '',
+  lessor_bank_account_id: null,
+  lessee_bank_account_id: null,
+  supplier_bank_account_id: null,
 })
 
 const showConfirmModal = ref(false)
@@ -306,6 +363,13 @@ const canEditSupplierFields = computed(() => {
   if (contract.value.contract_type !== 'purchase_sale') return false
   return auth.userRole === 'supplier' && contract.value.supplier_id === auth.user?.id
 })
+
+const canEditLesseeFields = computed(() => {
+  if (!contract.value || contract.value.all_confirmed) return false
+  return auth.userRole === 'client' && contract.value.lessee_id === auth.user?.id
+})
+
+const myBankAccounts = computed(() => auth.user?.bank_accounts || [])
 
 const canConfirm = computed(() => {
   if (!contract.value || contract.value.all_confirmed) return false
@@ -355,6 +419,9 @@ function syncFieldsFromContract() {
     currency: c.currency || 'BYN',
     tech_passport_number: c.tech_passport_number || '',
     tech_passport_date: c.tech_passport_date || '',
+    lessor_bank_account_id: c.lessor_bank_account_id || null,
+    lessee_bank_account_id: c.lessee_bank_account_id || null,
+    supplier_bank_account_id: c.supplier_bank_account_id || null,
   }
 }
 
@@ -366,10 +433,15 @@ async function saveFields() {
       if (fields.value.signing_date) payload.signing_date = fields.value.signing_date
       if (fields.value.signing_city) payload.signing_city = fields.value.signing_city
       if (fields.value.currency) payload.currency = fields.value.currency
+      if (fields.value.lessor_bank_account_id) payload.bank_account_id = fields.value.lessor_bank_account_id
+    }
+    if (canEditLesseeFields.value) {
+      if (fields.value.lessee_bank_account_id) payload.bank_account_id = fields.value.lessee_bank_account_id
     }
     if (canEditSupplierFields.value) {
       if (fields.value.tech_passport_number) payload.tech_passport_number = fields.value.tech_passport_number
       if (fields.value.tech_passport_date) payload.tech_passport_date = fields.value.tech_passport_date
+      if (fields.value.supplier_bank_account_id) payload.bank_account_id = fields.value.supplier_bank_account_id
     }
     const { data } = await leasingApi.updateContractFields(route.params.id, payload)
     contract.value = data
