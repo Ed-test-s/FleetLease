@@ -41,6 +41,8 @@ export const leasingApi = {
     api.get(`/leasing/contracts/${contractId}/schedule`),
 
   // Payments
+  preparePayment: (contractId, scheduleId) =>
+    api.get('/leasing/payments/prepare', { params: { contract_id: contractId, payment_schedule_id: scheduleId } }),
   makePayment: (data) => api.post('/leasing/payments', data),
 
   // Purchase contracts (legacy)

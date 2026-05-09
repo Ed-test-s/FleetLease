@@ -24,7 +24,7 @@ from app.models.leasing import (
     SupplierRequestStatus,
 )
 from app.models.notification import Notification
-from app.models.user import LeaseTerm, User, UserRole
+from app.models.user import BankAccount, Company, LeaseTerm, User, UserRole
 from app.models.vehicle import Vehicle
 from app.services.contract_document import (
     contract_docx_filename,
@@ -48,6 +48,7 @@ from app.schemas.leasing import (
     LeaseRequestStatusUpdate,
     PaymentCreate,
     PaymentOut,
+    PaymentPrepareOut,
     PaymentScheduleOut,
     PurchaseContractCreate,
     PurchaseContractOut,
@@ -903,6 +904,59 @@ async def get_schedule(
 
 
 # ── Payments ──────────────────────────────────────────────────────────
+@router.get("/payments/prepare", response_model=PaymentPrepareOut)
+async def prepare_payment(
+    contract_id: int = Query(...),
+    payment_schedule_id: int = Query(...),
+    user: User = Depends(require_role(UserRole.CLIENT)),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Contract).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    ps_result = await db.execute(
+        select(PaymentSchedule).where(PaymentSchedule.id == payment_schedule_id)
+    )
+    ps = ps_result.scalar_one_or_none()
+    if not ps:
+        raise HTTPException(status_code=404, detail="Payment schedule item not found")
+
+    sender_ba = await db.execute(
+        select(BankAccount).where(BankAccount.user_id == contract.lessee_id)
+    )
+    sender_bank = sender_ba.scalars().first()
+
+    receiver_ba = await db.execute(
+        select(BankAccount).where(BankAccount.user_id == contract.lessor_id)
+    )
+    receiver_bank = receiver_ba.scalars().first()
+
+    receiver_company = await db.execute(
+        select(Company).where(Company.user_id == contract.lessor_id)
+    )
+    company = receiver_company.scalar_one_or_none()
+    receiver_name = ""
+    if company:
+        parts = []
+        if company.legal_form:
+            parts.append(company.legal_form)
+        parts.append(company.company_name)
+        receiver_name = " ".join(parts)
+
+    return PaymentPrepareOut(
+        sender_iban=sender_bank.iban if sender_bank else None,
+        sender_swift=sender_bank.swift if sender_bank else None,
+        receiver_iban=receiver_bank.iban if receiver_bank else None,
+        receiver_swift=receiver_bank.swift if receiver_bank else None,
+        amount=ps.total_amount,
+        currency=contract.currency or "BYN",
+        receiver_name=receiver_name,
+        contract_number=contract.contract_number,
+    )
+
+
 @router.post("/payments", response_model=PaymentOut, status_code=201)
 async def make_payment(
     data: PaymentCreate,

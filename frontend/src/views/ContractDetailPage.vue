@@ -424,10 +424,7 @@ function confirmGenerateSchedule() {
 }
 
 function confirmPayment(s) {
-  confirmModalTitle.value = 'Подтвердить оплату'
-  confirmModalText.value = `Оплатить платёж на сумму ${formatPrice(s.total_amount)}?`
-  pendingAction = () => makePayment(s)
-  showConfirmModal.value = true
+  router.push(`/payment/${contract.value.id}/${s.id}`)
 }
 
 async function executeConfirmedAction() {
@@ -458,17 +455,4 @@ async function generateSchedule() {
   }
 }
 
-async function makePayment(s) {
-  try {
-    await leasingApi.makePayment({
-      contract_id: contract.value.id,
-      payment_schedule_id: s.id,
-      amount: s.total_amount,
-    })
-    s.status = 'paid'
-    notifStore.showToast('Платёж выполнен', 'success')
-  } catch (e) {
-    notifStore.showToast(e.response?.data?.detail || 'Ошибка', 'error')
-  }
-}
 </script>

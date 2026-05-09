@@ -169,6 +169,17 @@ class PaymentScheduleOut(BaseModel):
 
 
 # ── Payment ───────────────────────────────────────────────────────────
+class PaymentPrepareOut(BaseModel):
+    sender_iban: str | None = None
+    sender_swift: str | None = None
+    receiver_iban: str | None = None
+    receiver_swift: str | None = None
+    amount: float
+    currency: str
+    receiver_name: str
+    contract_number: str
+
+
 class PaymentCreate(BaseModel):
     contract_id: int
     payment_schedule_id: int | None = None

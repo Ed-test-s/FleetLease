@@ -103,6 +103,12 @@ const routes = [
     meta: { auth: true },
   },
   {
+    path: '/payment/:contractId/:scheduleId',
+    name: 'payment',
+    component: () => import('@/views/PaymentPage.vue'),
+    meta: { auth: true, roles: ['client'] },
+  },
+  {
     path: '/chats',
     name: 'chats',
     component: () => import('@/views/ChatsPage.vue'),
