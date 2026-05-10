@@ -762,6 +762,15 @@ async def update_contract_status(
         vehicle.count -= quantity
         if vehicle.count == 0:
             vehicle.is_visible = False
+    if (
+        contract.contract_type == ContractType.PURCHASE_SALE
+        and data.status == ContractStatus.TERMINATED
+        and previous_status != ContractStatus.TERMINATED
+        and contract.request_id
+    ):
+        lease_req = await db.get(LeaseRequest, contract.request_id)
+        if lease_req and lease_req.status != RequestStatus.REJECTED:
+            lease_req.status = RequestStatus.REJECTED
     contract.status = data.status
     await db.flush()
 

@@ -37,10 +37,18 @@
               :class="['btn-success btn-sm', leaseActivationBlocked ? 'opacity-50 cursor-not-allowed' : '']"
             >Активировать</button>
             <button v-if="contract.status === 'active'" @click="confirmStatusChange('completed')" class="btn-secondary btn-sm">Завершить</button>
+            <button
+              v-if="contract.status === 'active' && contract.contract_type === 'purchase_sale'"
+              @click="confirmStatusChange('terminated')"
+              class="btn-danger btn-sm"
+            >Расторгнуть</button>
             <button v-if="contract.status === 'active' && contract.contract_type === 'lease'" @click="confirmGenerateSchedule" class="btn-primary btn-sm">Сформировать график</button>
             </div>
             <p v-if="leaseActivationBlocked" class="text-xs text-amber-700 text-right max-w-xs">
               Активация лизинга доступна после статуса «Завершён» у договора ДКП.
+            </p>
+            <p v-if="isPurchaseTerminated" class="text-xs text-red-700 text-right max-w-xs">
+              ДКП расторгнут: поля и действия недоступны.
             </p>
           </div>
         </div>
@@ -253,9 +261,9 @@
             <p class="text-sm text-gray-500">Документы ещё не сформированы.</p>
             <button
               @click="generateDocs"
-              :disabled="generatingDocs || isLeaseWithoutSchedule"
-              :title="isLeaseWithoutSchedule ? 'Сначала сформируйте график платежей' : ''"
-              class="btn-primary btn-sm"
+              :disabled="generatingDocs || isLeaseWithoutSchedule || isPurchaseTerminated"
+              :title="isPurchaseTerminated ? 'Для расторгнутого ДКП действие недоступно' : (isLeaseWithoutSchedule ? 'Сначала сформируйте график платежей' : '')"
+              :class="['btn-primary btn-sm', isPurchaseTerminated ? 'opacity-50 cursor-not-allowed' : '']"
             >
               {{ generatingDocs ? 'Генерация...' : 'Сформировать документы' }}
             </button>
@@ -368,26 +376,31 @@ const confirmModalTitle = ref('')
 const confirmModalText = ref('')
 let pendingAction = null
 
+const isPurchaseTerminated = computed(() => {
+  const c = contract.value
+  return c?.contract_type === 'purchase_sale' && c?.status === 'terminated'
+})
+
 const canEditLessorFields = computed(() => {
-  if (!contract.value || contract.value.all_confirmed) return false
+  if (!contract.value || contract.value.all_confirmed || isPurchaseTerminated.value) return false
   return auth.userRole === 'lease_manager' && contract.value.lessor_id === auth.user?.id
 })
 
 const canEditSupplierFields = computed(() => {
-  if (!contract.value || contract.value.all_confirmed) return false
+  if (!contract.value || contract.value.all_confirmed || isPurchaseTerminated.value) return false
   if (contract.value.contract_type !== 'purchase_sale') return false
   return auth.userRole === 'supplier' && contract.value.supplier_id === auth.user?.id
 })
 
 const canEditLesseeFields = computed(() => {
-  if (!contract.value || contract.value.all_confirmed) return false
+  if (!contract.value || contract.value.all_confirmed || isPurchaseTerminated.value) return false
   return auth.userRole === 'client' && contract.value.lessee_id === auth.user?.id
 })
 
 const myBankAccounts = computed(() => auth.user?.bank_accounts || [])
 
 const canConfirm = computed(() => {
-  if (!contract.value || contract.value.all_confirmed) return false
+  if (!contract.value || contract.value.all_confirmed || isPurchaseTerminated.value) return false
   const uid = auth.user?.id
   if (uid === contract.value.lessor_id && !contract.value.lessor_confirmed) return true
   if (uid === contract.value.lessee_id && !contract.value.lessee_confirmed) return true
@@ -453,6 +466,7 @@ function syncFieldsFromContract() {
 }
 
 async function saveFields() {
+  if (isPurchaseTerminated.value) return
   savingFields.value = true
   try {
     const payload = {}
@@ -482,6 +496,7 @@ async function saveFields() {
 }
 
 async function doConfirm(confirmed) {
+  if (isPurchaseTerminated.value) return
   try {
     const { data } = await leasingApi.confirmContract(route.params.id, confirmed)
     contract.value = data
@@ -492,6 +507,10 @@ async function doConfirm(confirmed) {
 }
 
 async function generateDocs() {
+  if (isPurchaseTerminated.value) {
+    notifStore.showToast('Для расторгнутого ДКП действие недоступно', 'warning')
+    return
+  }
   if (isLeaseWithoutSchedule.value) {
     notifStore.showToast('Сначала сформируйте график платежей', 'warning')
     return
@@ -509,9 +528,11 @@ async function generateDocs() {
 }
 
 function confirmStatusChange(newStatus) {
+  if (isPurchaseTerminated.value) return
   const labels = {
     active: { title: 'Активировать договор', text: 'Вы уверены, что хотите активировать данный договор?' },
     completed: { title: 'Завершить договор', text: 'Вы уверены, что хотите завершить данный договор?' },
+    terminated: { title: 'Расторгнуть договор', text: 'Вы уверены, что хотите расторгнуть данный договор?' },
   }
   confirmModalTitle.value = labels[newStatus]?.title || 'Подтверждение'
   confirmModalText.value = labels[newStatus]?.text || 'Вы уверены?'
@@ -520,6 +541,7 @@ function confirmStatusChange(newStatus) {
 }
 
 function confirmGenerateSchedule() {
+  if (isPurchaseTerminated.value) return
   confirmModalTitle.value = 'Сформировать график'
   confirmModalText.value = 'Сформировать график платежей для данного договора?'
   pendingAction = () => generateSchedule()
