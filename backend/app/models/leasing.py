@@ -167,6 +167,7 @@ class PaymentSchedule(Base):
     principal_amount: Mapped[float] = mapped_column(Float, nullable=False)
     interest_amount: Mapped[float] = mapped_column(Float, nullable=False)
     vat_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    interest_vat_amount: Mapped[float] = mapped_column(Float, default=0.0)
     remaining_debt: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[PaymentScheduleStatus] = mapped_column(
         Enum(PaymentScheduleStatus), default=PaymentScheduleStatus.PENDING

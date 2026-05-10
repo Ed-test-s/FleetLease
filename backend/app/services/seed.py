@@ -193,7 +193,7 @@ async def _create_demo_users(db: AsyncSession) -> tuple[User, User, User]:
         [
             Company(
                 user_id=supplier.id,
-                company_name="ООО ГрузовичкОФФ",
+                company_name="ГрузовичкОФФ",
                 legal_form="ООО",
                 unp="193456781",
                 okpo="102938475601",
@@ -203,7 +203,7 @@ async def _create_demo_users(db: AsyncSession) -> tuple[User, User, User]:
             ),
             Company(
                 user_id=lessor.id,
-                company_name="ОАО АстраЛизинг",
+                company_name="АстраЛизинг",
                 legal_form="ОАО",
                 unp="192345678",
                 okpo="564738291045",

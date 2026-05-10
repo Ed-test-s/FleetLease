@@ -609,8 +609,8 @@ async def update_supplier_request_status(
             user_id=sr.lessor_id,
             title="Заявка на покупку одобрена",
             text=f"Поставщик одобрил заявку #{sr.id}. Сформирован договор купли-продажи #{psa_contract.contract_number}.",
-            type="request_status_changed",
-            entity_id=sr.id,
+            type="contract_status_changed",
+            entity_id=psa_contract.id,
         ))
     else:
         status_labels = {
@@ -981,6 +981,7 @@ async def generate_schedule(
             principal_amount=round(principal_part, 2),
             interest_amount=round(interest_part, 2),
             vat_amount=round(pay * vat_fraction, 2),
+            interest_vat_amount=round(interest_part * vat_fraction, 2),
             remaining_debt=round(max(remaining_after, 0), 2),
         )
         db.add(ps)
@@ -1111,6 +1112,15 @@ async def generate_documents(
         raise HTTPException(status_code=404, detail="Contract not found")
     if not contract.all_confirmed:
         raise HTTPException(status_code=400, detail="Все стороны должны подтвердить данные перед генерацией документов")
+    if contract.contract_type == ContractType.LEASE:
+        schedule_exists = await db.execute(
+            select(PaymentSchedule.id).where(PaymentSchedule.contract_id == contract.id).limit(1)
+        )
+        if schedule_exists.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Сначала сформируйте график платежей, затем генерируйте документы",
+            )
 
     if contract.contract_type == ContractType.LEASE and contract.request_id:
         psa = await _psa_contract_for_request(db, contract.request_id)
@@ -1177,8 +1187,15 @@ async def generate_documents(
             url = upload_contract_document(buf, f"contracts/psa/{contract.id}", name)
             contract.psa_doc_url = url
         elif contract.contract_type == ContractType.LEASE:
+            schedule_result = await db.execute(
+                select(PaymentSchedule)
+                .where(PaymentSchedule.contract_id == contract.id)
+                .order_by(PaymentSchedule.payment_date, PaymentSchedule.id)
+            )
+            schedule_items = schedule_result.scalars().all()
             buf = generate_la_document(
                 contract, vehicle, lessor_user, lessee_user, supplier_user,
+                payment_schedule=schedule_items,
                 lessor_bank_account_id=contract.lessor_bank_account_id,
                 lessee_bank_account_id=contract.lessee_bank_account_id,
             )

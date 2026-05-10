@@ -153,6 +153,7 @@ const loading = ref(true)
 const statusFilter = ref('')
 const tab = ref('lease')
 const pendingFocusRequestId = ref(null)
+const pendingFocusRequestKind = ref(null)
 const highlightedLeaseRequestId = ref(null)
 const highlightedSupplierRequestId = ref(null)
 let highlightTimer = null
@@ -171,9 +172,10 @@ const showSupplierRequests = computed(() => {
 
 watch(tab, () => fetchData())
 watch(
-  () => route.query.focusRequestId,
-  (value) => {
-    pendingFocusRequestId.value = parseFocusRequestId(value)
+  () => [route.query.focusRequestId, route.query.focusRequestKind],
+  ([focusRequestId, focusRequestKind]) => {
+    pendingFocusRequestId.value = parseFocusRequestId(focusRequestId)
+    pendingFocusRequestKind.value = parseFocusRequestKind(focusRequestKind)
     fetchData()
   },
   { immediate: true },
@@ -183,6 +185,11 @@ function parseFocusRequestId(value) {
   const raw = Array.isArray(value) ? value[0] : value
   const parsed = Number(raw)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function parseFocusRequestKind(value) {
+  const raw = Array.isArray(value) ? value[0] : value
+  return raw === 'lease' || raw === 'purchase' ? raw : null
 }
 
 function applyHighlight(leaseRequestId, supplierRequestId) {
@@ -198,34 +205,72 @@ function applyHighlight(leaseRequestId, supplierRequestId) {
 async function focusRequestIfNeeded() {
   const requestId = pendingFocusRequestId.value
   if (!requestId) return
+  const requestKind = pendingFocusRequestKind.value
 
   const leaseMatch = requests.value.some((r) => r.id === requestId)
   const supplierMatch = supplierRequests.value.some((sr) => sr.id === requestId)
 
   if (auth.userRole === 'lease_manager') {
-    if (leaseMatch && tab.value !== 'lease') {
+    if (requestKind === 'lease' && leaseMatch && tab.value !== 'lease') {
       tab.value = 'lease'
       return
     }
-    if (supplierMatch && tab.value !== 'purchase') {
+    if (requestKind === 'purchase' && supplierMatch && tab.value !== 'purchase') {
       tab.value = 'purchase'
       return
     }
+    if (!requestKind) {
+      if (leaseMatch && !supplierMatch && tab.value !== 'lease') {
+        tab.value = 'lease'
+        return
+      }
+      if (supplierMatch && !leaseMatch && tab.value !== 'purchase') {
+        tab.value = 'purchase'
+        return
+      }
+    }
   }
 
-  const targetElementId = leaseMatch
-    ? `lease-request-${requestId}`
-    : supplierMatch
-      ? `supplier-request-${requestId}`
-      : null
+  let targetElementId = null
+  let targetLeaseRequestId = null
+  let targetSupplierRequestId = null
+
+  if (requestKind === 'lease' && leaseMatch) {
+    targetElementId = `lease-request-${requestId}`
+    targetLeaseRequestId = requestId
+  } else if (requestKind === 'purchase' && supplierMatch) {
+    targetElementId = `supplier-request-${requestId}`
+    targetSupplierRequestId = requestId
+  } else if (leaseMatch && supplierMatch) {
+    if (auth.userRole === 'lease_manager') {
+      if (tab.value === 'lease') {
+        targetElementId = `lease-request-${requestId}`
+        targetLeaseRequestId = requestId
+      } else if (tab.value === 'purchase') {
+        targetElementId = `supplier-request-${requestId}`
+        targetSupplierRequestId = requestId
+      }
+    } else {
+      targetElementId = `lease-request-${requestId}`
+      targetLeaseRequestId = requestId
+    }
+  } else if (leaseMatch) {
+    targetElementId = `lease-request-${requestId}`
+    targetLeaseRequestId = requestId
+  } else if (supplierMatch) {
+    targetElementId = `supplier-request-${requestId}`
+    targetSupplierRequestId = requestId
+  }
+
   if (!targetElementId) return
 
   const cardElement = document.getElementById(targetElementId)
   if (!cardElement) return
 
   cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  applyHighlight(leaseMatch ? requestId : null, supplierMatch ? requestId : null)
+  applyHighlight(targetLeaseRequestId, targetSupplierRequestId)
   pendingFocusRequestId.value = null
+  pendingFocusRequestKind.value = null
 }
 
 async function fetchData() {

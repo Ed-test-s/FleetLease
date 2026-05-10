@@ -32,6 +32,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { leasingApi } from '@/api/leasing'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatDateTime } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -39,6 +40,42 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 const notifStore = useNotificationsStore()
 const router = useRouter()
 const loading = ref(true)
+
+function detectRequestFocusKind(notification) {
+  const title = String(notification.title || '').toLowerCase()
+  const text = String(notification.text || '').toLowerCase()
+  const combined = `${title} ${text}`
+  if (combined.includes('заявка на покупку')) return 'purchase'
+  if (combined.includes('заявка на лизинг') || combined.includes('лизинг')) return 'lease'
+  return null
+}
+
+function extractPurchaseContractNumber(text) {
+  if (!text) return null
+  const match = String(text).match(/договор\s+купли-продажи\s+#([A-Za-z0-9-]+)/i)
+  return match ? match[1] : null
+}
+
+async function openPurchaseContractFromNotification(notification) {
+  const contractNumber = extractPurchaseContractNumber(notification.text)
+  if (!contractNumber) return false
+
+  try {
+    const { data } = await leasingApi.listContracts({ limit: 100, contract_type: 'purchase_sale' })
+    const match = Array.isArray(data)
+      ? data.find((contract) => contract.contract_number === contractNumber)
+      : null
+    if (match?.id) {
+      await router.push(`/contracts/${match.id}`)
+      return true
+    }
+  } catch {
+    // Fallback below handles navigation when lookup fails.
+  }
+
+  await router.push('/contracts')
+  return true
+}
 
 async function openNotification(notification) {
   if (!notification.is_read) {
@@ -48,7 +85,13 @@ async function openNotification(notification) {
   if (!notification.type || !notification.entity_id) return
 
   if (notification.type === 'request_status_changed') {
-    await router.push({ path: '/requests', query: { focusRequestId: String(notification.entity_id) } })
+    const openedPurchaseContract = await openPurchaseContractFromNotification(notification)
+    if (openedPurchaseContract) return
+
+    const focusRequestKind = detectRequestFocusKind(notification)
+    const query = { focusRequestId: String(notification.entity_id) }
+    if (focusRequestKind) query.focusRequestKind = focusRequestKind
+    await router.push({ path: '/requests', query })
     return
   }
   if (notification.type === 'contract_status_changed') {

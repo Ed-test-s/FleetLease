@@ -251,7 +251,12 @@
           </div>
           <div v-else class="flex items-center gap-3">
             <p class="text-sm text-gray-500">Документы ещё не сформированы.</p>
-            <button @click="generateDocs" :disabled="generatingDocs" class="btn-primary btn-sm">
+            <button
+              @click="generateDocs"
+              :disabled="generatingDocs || isLeaseWithoutSchedule"
+              :title="isLeaseWithoutSchedule ? 'Сначала сформируйте график платежей' : ''"
+              class="btn-primary btn-sm"
+            >
               {{ generatingDocs ? 'Генерация...' : 'Сформировать документы' }}
             </button>
           </div>
@@ -268,15 +273,15 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-surface-200 text-left text-xs text-gray-500 uppercase tracking-wide">
-                <th class="pb-3 pr-4">No</th>
-                <th class="pb-3 pr-4">Дата</th>
-                <th class="pb-3 pr-4">Платёж</th>
-                <th class="pb-3 pr-4">Тело долга</th>
-                <th class="pb-3 pr-4">Проценты</th>
-                <th class="pb-3 pr-4">НДС</th>
+                <th class="pb-3 pr-4">№</th>
+                <th class="pb-3 pr-4">Дата лизингового платежа не позднее</th>
+                <th class="pb-3 pr-4">Лизинговый платеж с НДС</th>
+                <th class="pb-3 pr-4">В т. ч. НДС {{ currentVatRateLabel }}%</th>
+                <th class="pb-3 pr-4">Погашение долга без НДС</th>
+                <th class="pb-3 pr-4">Лизинговая ставка без НДС</th>
+                <th class="pb-3 pr-4">НДС на лизинговую ставку</th>
                 <th class="pb-3 pr-4">Остаток</th>
                 <th class="pb-3 pr-4">Статус</th>
-                <th class="pb-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -284,16 +289,26 @@
                 <td class="py-3 pr-4 text-gray-400">{{ i + 1 }}</td>
                 <td class="py-3 pr-4">{{ formatDate(s.payment_date) }}</td>
                 <td class="py-3 pr-4 font-medium">{{ formatPrice(s.total_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatPrice(s.vat_amount) }}</td>
                 <td class="py-3 pr-4">{{ formatPrice(s.principal_amount) }}</td>
                 <td class="py-3 pr-4">{{ formatPrice(s.interest_amount) }}</td>
-                <td class="py-3 pr-4">{{ formatPrice(s.vat_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatPrice(s.interest_vat_amount) }}</td>
                 <td class="py-3 pr-4">{{ formatPrice(s.remaining_debt) }}</td>
-                <td class="py-3 pr-4"><StatusBadge :status="s.status" /></td>
-                <td class="py-3">
-                  <button v-if="s.status === 'pending' && auth.userRole === 'client'"
-                          @click="confirmPayment(s)" class="btn-primary btn-sm">
-                    Оплатить
-                  </button>
+                <td class="py-3 pr-4">
+                  <template v-if="auth.userRole === 'client'">
+                    <button
+                      v-if="s.status === 'pending'"
+                      @click="confirmPayment(s)"
+                      class="btn-primary btn-sm"
+                    >
+                      Оплатить
+                    </button>
+                    <span v-else-if="s.status === 'paid'" class="text-sm font-medium text-green-700">
+                      Оплачен
+                    </span>
+                    <span v-else class="text-sm text-gray-500">—</span>
+                  </template>
+                  <StatusBadge v-else :status="s.status" />
                 </td>
               </tr>
             </tbody>
@@ -386,6 +401,18 @@ const leaseActivationBlocked = computed(() => {
   return c.linked_purchase_status !== 'completed'
 })
 
+const isLeaseWithoutSchedule = computed(() => {
+  const c = contract.value
+  return c?.contract_type === 'lease' && schedule.value.length === 0
+})
+
+const currentVatRateLabel = computed(() => {
+  const value = Number(contract.value?.vat_rate)
+  if (!Number.isFinite(value)) return '20'
+  if (Number.isInteger(value)) return String(value)
+  return String(value)
+})
+
 function goToContract(id) {
   if (id == null) return
   router.push({ name: 'contract-detail', params: { id: String(id) } })
@@ -465,6 +492,10 @@ async function doConfirm(confirmed) {
 }
 
 async function generateDocs() {
+  if (isLeaseWithoutSchedule.value) {
+    notifStore.showToast('Сначала сформируйте график платежей', 'warning')
+    return
+  }
   generatingDocs.value = true
   try {
     const { data } = await leasingApi.generateDocuments(route.params.id)

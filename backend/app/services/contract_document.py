@@ -6,6 +6,9 @@ from io import BytesIO
 from pathlib import Path
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from lxml import etree
 
 from app.core.config import settings
@@ -299,6 +302,151 @@ def _replace_in_doc(doc: Document, replacements: dict[str, str]) -> None:
             if footer and footer.is_linked_to_previous is False:
                 for p in footer.paragraphs:
                     _replace_in_paragraph(p, replacements)
+
+
+_SCHEDULE_STATUS_LABELS = {
+    "pending": "Ожидает",
+    "paid": "Оплачен",
+    "overdue": "Просрочен",
+}
+
+
+def _as_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _format_amount_plain(value) -> str:
+    return f"{_as_float(value):.2f}"
+
+
+def _format_vat_rate(vat_rate: float) -> str:
+    normalized = _as_float(vat_rate, 20.0)
+    if normalized.is_integer():
+        return str(int(normalized))
+    return f"{normalized:.2f}".rstrip("0").rstrip(".")
+
+
+def _schedule_status_label(status) -> str:
+    raw = getattr(status, "value", status)
+    return _SCHEDULE_STATUS_LABELS.get(str(raw), str(raw) if raw is not None else "")
+
+
+def _find_schedule_table(doc: Document):
+    known_headers = {
+        "Дата",
+        "Платёж",
+        "Тело долга",
+        "Проценты",
+        "НДС",
+        "Остаток",
+        "Статус",
+        "Дата лизингового платежа",
+    }
+    for table in doc.tables:
+        cells = [cell.text.strip() for row in table.rows for cell in row.cells]
+        if any("[таблица]" in text for text in cells):
+            return table
+        if not table.rows:
+            continue
+        header_cells = {cell.text.strip() for cell in table.rows[0].cells}
+        if header_cells & known_headers:
+            return table
+    return None
+
+
+def _find_schedule_placeholder_paragraph(doc: Document):
+    for paragraph in doc.paragraphs:
+        if "[таблица]" in paragraph.text:
+            return paragraph
+    return None
+
+
+def _set_table_borders(table) -> None:
+    tbl = table._tbl
+    tbl_pr = tbl.tblPr
+    if tbl_pr is None:
+        tbl_pr = OxmlElement("w:tblPr")
+        tbl.insert(0, tbl_pr)
+
+    tbl_borders = tbl_pr.find(qn("w:tblBorders"))
+    if tbl_borders is None:
+        tbl_borders = OxmlElement("w:tblBorders")
+        tbl_pr.append(tbl_borders)
+
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        element = tbl_borders.find(qn(f"w:{side}"))
+        if element is None:
+            element = OxmlElement(f"w:{side}")
+            tbl_borders.append(element)
+        element.set(qn("w:val"), "single")
+        element.set(qn("w:sz"), "8")
+        element.set(qn("w:space"), "0")
+        element.set(qn("w:color"), "000000")
+
+
+def _fill_schedule_table(table, payment_schedule, vat_rate: float) -> bool:
+    if not table.rows:
+        return False
+
+    headers = [
+        "№",
+        "Дата лизингового платежа не позднее",
+        "Лизинговый платеж с НДС",
+        f"В т. ч. НДС {_format_vat_rate(vat_rate)}%",
+        "Погашение долга без НДС",
+        "Лизинговая ставка без НДС",
+        "НДС на лизинговую ставку",
+        "Остаток",
+    ]
+
+    while len(table.rows) > 1:
+        table._tbl.remove(table.rows[-1]._tr)
+
+    header_row = table.rows[0]
+    if len(header_row.cells) < len(headers):
+        return False
+    for idx, text in enumerate(headers):
+        cell = header_row.cells[idx]
+        cell.text = text
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in paragraph.runs:
+                run.bold = True
+
+    for idx, item in enumerate(payment_schedule, start=1):
+        row = table.add_row().cells
+        if len(row) < len(headers):
+            continue
+        row[0].text = str(idx)
+        row[1].text = _format_date_dots(getattr(item, "payment_date", None))
+        row[2].text = _format_amount_plain(getattr(item, "total_amount", 0))
+        row[3].text = _format_amount_plain(getattr(item, "vat_amount", 0))
+        row[4].text = _format_amount_plain(getattr(item, "principal_amount", 0))
+        row[5].text = _format_amount_plain(getattr(item, "interest_amount", 0))
+        row[6].text = _format_amount_plain(getattr(item, "interest_vat_amount", 0))
+        row[7].text = _format_amount_plain(getattr(item, "remaining_debt", 0))
+    _set_table_borders(table)
+    return True
+
+
+def _render_payment_schedule_table(doc: Document, payment_schedule, vat_rate: float) -> None:
+    if not payment_schedule:
+        return
+    table = _find_schedule_table(doc)
+    if table is not None and _fill_schedule_table(table, payment_schedule, vat_rate):
+        return
+
+    placeholder = _find_schedule_placeholder_paragraph(doc)
+    if placeholder is None:
+        return
+
+    table = doc.add_table(rows=1, cols=8)
+    _fill_schedule_table(table, payment_schedule, vat_rate)
+    placeholder._p.addnext(table._tbl)
+    placeholder.text = placeholder.text.replace("[таблица]", "").strip()
 
 
 # ---------------------------------------------------------------------------
@@ -597,8 +745,16 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
 # LA document generation
 # ---------------------------------------------------------------------------
 
-def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_user=None,
-                         lessor_bank_account_id=None, lessee_bank_account_id=None) -> BytesIO:
+def generate_la_document(
+    contract,
+    vehicle,
+    lessor_user,
+    lessee_user,
+    supplier_user=None,
+    payment_schedule=None,
+    lessor_bank_account_id=None,
+    lessee_bank_account_id=None,
+) -> BytesIO:
     doc = Document(str(LA_TEMPLATE))
 
     vat_rate = contract.vat_rate or 20
@@ -693,6 +849,7 @@ def generate_la_document(contract, vehicle, lessor_user, lessee_user, supplier_u
     }
 
     _replace_in_doc(doc, repl)
+    _render_payment_schedule_table(doc, payment_schedule, vat_rate)
     _protect_document(doc)
 
     buf = BytesIO()

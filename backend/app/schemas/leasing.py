@@ -159,6 +159,7 @@ class PaymentScheduleCreate(BaseModel):
     principal_amount: float
     interest_amount: float
     vat_amount: float = 0.0
+    interest_vat_amount: float = 0.0
     remaining_debt: float
 
 
@@ -170,6 +171,7 @@ class PaymentScheduleOut(BaseModel):
     principal_amount: float
     interest_amount: float
     vat_amount: float
+    interest_vat_amount: float
     remaining_debt: float
     status: PaymentScheduleStatus
     model_config = {"from_attributes": True}
