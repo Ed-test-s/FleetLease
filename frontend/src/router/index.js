@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import RequestsPage from '@/views/RequestsPage.vue'
+import ContractsPage from '@/views/ContractsPage.vue'
 
 const routes = [
   {
@@ -93,13 +95,13 @@ const routes = [
   {
     path: '/requests',
     name: 'requests',
-    component: () => import('@/views/RequestsPage.vue'),
+    component: RequestsPage,
     meta: { auth: true },
   },
   {
     path: '/contracts',
     name: 'contracts',
-    component: () => import('@/views/ContractsPage.vue'),
+    component: ContractsPage,
     meta: { auth: true },
   },
   {
