@@ -57,7 +57,7 @@
         </div>
         <div>
           <label class="label">Количество</label>
-          <input v-model.number="form.count" type="number" class="input-field" min="0" />
+          <input v-model.number="form.count" type="number" class="input-field" min="0" step="1" />
         </div>
         <div>
           <label class="label">Код предложения</label>
@@ -139,9 +139,12 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <input v-model="form.is_visible" type="checkbox" id="visible" class="rounded border-gray-300 text-primary-500 focus:ring-primary-500" />
+        <input v-model="form.is_visible" :disabled="isOutOfStock" type="checkbox" id="visible" class="rounded border-gray-300 text-primary-500 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed" />
         <label for="visible" class="text-sm text-gray-700">Объявление активно (видно всем)</label>
       </div>
+      <p v-if="isOutOfStock" class="text-xs text-gray-500">
+        Укажите количество больше 0, чтобы включить объявление.
+      </p>
 
       <div class="border-t border-surface-200 pt-4">
         <label class="label">Фотографии</label>
@@ -177,7 +180,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { vehiclesApi } from '@/api/vehicles'
 import { referencesApi } from '@/api/references'
@@ -207,6 +210,7 @@ const form = ref({
   location: '', fuel_type: '', engine_capacity: null, hp: null,
   transmission: '', drive_type: '', extras: '', description: '', is_visible: true,
 })
+const isOutOfStock = computed(() => normalizeCount(form.value.count) <= 0)
 
 const brandOptions = computed(() => brands.value.map(b => ({ value: b.name, label: b.name })))
 const brandExists = computed(() => brands.value.some(b => b.name === form.value.brand))
@@ -227,6 +231,27 @@ const cityOptions = computed(() => {
 
 function onBrandChange() { form.value.model = null }
 function onRegionChange() { form.value.city_id = null }
+
+function normalizeCount(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 0
+  return Math.max(0, Math.trunc(num))
+}
+
+watch(
+  () => form.value.count,
+  (val) => {
+    const normalized = normalizeCount(val)
+    if (val !== normalized) {
+      form.value.count = normalized
+      return
+    }
+    if (normalized <= 0 && form.value.is_visible) {
+      form.value.is_visible = false
+    }
+  },
+  { immediate: true }
+)
 
 async function addNewBrand() {
   if (!newBrandInput.value) return
@@ -278,6 +303,11 @@ onMounted(async () => {
 async function handleSubmit() {
   submitting.value = true
   try {
+    form.value.count = normalizeCount(form.value.count)
+    if (form.value.count <= 0 && form.value.is_visible) {
+      notifStore.showToast('Нельзя включить объявление при нулевом количестве техники', 'error')
+      return
+    }
     const payload = { ...form.value }
     if (isEdit.value) {
       await vehiclesApi.update(route.params.id, payload)

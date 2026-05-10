@@ -278,10 +278,6 @@
               </select>
               <p class="text-xs text-gray-400 mt-1">Выберите заявку лизингополучателя, в рамках которой покупается техника</p>
             </div>
-            <div>
-              <label class="label">Количество (шт.)</label>
-              <input v-model.number="purchaseForm.quantity" type="number" class="input-field" min="1" required />
-            </div>
             <div class="flex gap-3">
               <button type="button" @click="showPurchaseModal = false" class="btn-secondary flex-1">Отмена</button>
               <button type="submit" :disabled="purchaseLoading" class="btn-primary flex-1">
@@ -336,7 +332,7 @@ const requestForm = ref({ lease_term: 24, prepayment: 0, comment: '' })
 const requestLoading = ref(false)
 
 const showPurchaseModal = ref(false)
-const purchaseForm = ref({ lease_request_id: '', quantity: 1 })
+const purchaseForm = ref({ lease_request_id: '' })
 const purchaseLoading = ref(false)
 const myLeaseRequests = ref([])
 
@@ -492,6 +488,7 @@ function openPurchaseFlow() {
     notifStore.showToast(bankRequiredMsg, 'error')
     return
   }
+  purchaseForm.value = { lease_request_id: '' }
   showPurchaseModal.value = true
 }
 
@@ -517,8 +514,9 @@ async function submitPurchaseRequest() {
     await leasingApi.createSupplierRequest({
       lease_request_id: purchaseForm.value.lease_request_id,
       vehicle_id: vehicle.value.id,
-      quantity: purchaseForm.value.quantity,
+      quantity: 1,
     })
+    purchaseForm.value = { lease_request_id: '' }
     showPurchaseModal.value = false
     notifStore.showToast('Заявка на покупку отправлена поставщику!', 'success')
   } catch (e) {

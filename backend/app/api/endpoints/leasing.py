@@ -694,6 +694,7 @@ async def update_contract_status(
     contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    previous_status = contract.status
     if (
         data.status == ContractStatus.ACTIVE
         and contract.contract_type == ContractType.LEASE
@@ -709,6 +710,33 @@ async def update_contract_status(
                 status_code=400,
                 detail="Активация договора лизинга возможна после завершения договора купли-продажи (ДКП).",
             )
+    if (
+        contract.contract_type == ContractType.PURCHASE_SALE
+        and data.status == ContractStatus.COMPLETED
+        and previous_status != ContractStatus.COMPLETED
+    ):
+        vehicle = await db.get(Vehicle, contract.vehicle_id)
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        if contract.supplier_id and vehicle.supplier_id != contract.supplier_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Техника не принадлежит поставщику договора.",
+            )
+        quantity = max(int(contract.quantity or 0), 0)
+        if quantity <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректное количество техники в договоре купли-продажи.",
+            )
+        if vehicle.count < quantity:
+            raise HTTPException(
+                status_code=400,
+                detail="Недостаточно техники в наличии для завершения ДКП.",
+            )
+        vehicle.count -= quantity
+        if vehicle.count == 0:
+            vehicle.is_visible = False
     contract.status = data.status
     await db.flush()
 

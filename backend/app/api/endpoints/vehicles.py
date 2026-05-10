@@ -14,6 +14,21 @@ from app.services.user_display import user_display_name
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
+def _validate_visibility_with_count(
+    *, count: int, is_visible: bool, explicit_visibility: bool
+) -> bool:
+    if count < 0:
+        raise HTTPException(status_code=400, detail="Количество не может быть отрицательным")
+    if count <= 0:
+        if explicit_visibility and is_visible:
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя включить объявление при нулевом количестве техники",
+            )
+        return False
+    return is_visible
+
+
 def _vehicle_detail_load():
     return (
         selectinload(Vehicle.images),
@@ -175,7 +190,14 @@ async def create_vehicle(
     user: User = Depends(require_role(UserRole.SUPPLIER)),
     db: AsyncSession = Depends(get_db),
 ):
-    vehicle = Vehicle(supplier_id=user.id, **data.model_dump())
+    visible = _validate_visibility_with_count(
+        count=data.count,
+        is_visible=data.is_visible,
+        explicit_visibility=True,
+    )
+    payload = data.model_dump()
+    payload["is_visible"] = visible
+    vehicle = Vehicle(supplier_id=user.id, **payload)
     db.add(vehicle)
     await db.flush()
     result = await db.execute(
@@ -200,6 +222,14 @@ async def update_vehicle(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found or access denied")
     update_data = data.model_dump(exclude_unset=True)
+    final_count = update_data.get("count", vehicle.count)
+    final_visible = update_data.get("is_visible", vehicle.is_visible)
+    explicit_visibility = "is_visible" in update_data
+    update_data["is_visible"] = _validate_visibility_with_count(
+        count=final_count,
+        is_visible=final_visible,
+        explicit_visibility=explicit_visibility,
+    )
     for k, v in update_data.items():
         setattr(vehicle, k, v)
     await db.flush()
