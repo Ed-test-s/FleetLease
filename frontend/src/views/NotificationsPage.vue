@@ -14,7 +14,7 @@
     </div>
     <div v-else class="space-y-2">
       <div v-for="n in notifStore.notifications" :key="n.id"
-           @click="!n.is_read && notifStore.markRead(n.id)"
+           @click="openNotification(n)"
            :class="['card p-4 cursor-pointer transition-colors', n.is_read ? 'bg-white' : 'bg-primary-50 border-primary-200']">
         <div class="flex items-start justify-between">
           <div>
@@ -31,12 +31,34 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useNotificationsStore } from '@/stores/notifications'
 import { formatDateTime } from '@/utils/format'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const notifStore = useNotificationsStore()
+const router = useRouter()
 const loading = ref(true)
+
+async function openNotification(notification) {
+  if (!notification.is_read) {
+    await notifStore.markRead(notification.id)
+  }
+
+  if (!notification.type || !notification.entity_id) return
+
+  if (notification.type === 'request_status_changed') {
+    await router.push({ path: '/requests', query: { focusRequestId: String(notification.entity_id) } })
+    return
+  }
+  if (notification.type === 'contract_status_changed') {
+    await router.push(`/contracts/${notification.entity_id}`)
+    return
+  }
+  if (notification.type === 'chat_new_message') {
+    await router.push(`/chats/${notification.entity_id}`)
+  }
+}
 
 onMounted(async () => {
   await notifStore.fetchNotifications()

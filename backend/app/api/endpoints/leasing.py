@@ -322,6 +322,8 @@ async def create_request(
         user_id=data.lease_company_id,
         title="Новая заявка на лизинг",
         text=f"Поступила новая заявка #{req.id} на лизинг техники.",
+        type="request_status_changed",
+        entity_id=req.id,
     ))
 
     await db.flush()
@@ -432,6 +434,8 @@ async def update_request_status(
             user_id=req.user_id,
             title="Заявка одобрена",
             text=f"Ваша заявка #{req.id} одобрена. Сформирован договор лизинга #{contract.contract_number}.",
+            type="request_status_changed",
+            entity_id=req.id,
         ))
     else:
         status_labels = {
@@ -442,6 +446,8 @@ async def update_request_status(
             user_id=req.user_id,
             title="Статус заявки обновлён",
             text=f"Ваша заявка #{req.id} {status_labels.get(data.status, 'обновлена')}.",
+            type="request_status_changed",
+            entity_id=req.id,
         ))
 
     await db.flush()
@@ -490,6 +496,8 @@ async def create_supplier_request(
         user_id=vehicle.supplier_id,
         title="Новая заявка на покупку техники",
         text=f"Лизинговая компания хочет приобрести технику (заявка #{sr.id}).",
+        type="request_status_changed",
+        entity_id=sr.id,
     ))
 
     await db.flush()
@@ -601,6 +609,8 @@ async def update_supplier_request_status(
             user_id=sr.lessor_id,
             title="Заявка на покупку одобрена",
             text=f"Поставщик одобрил заявку #{sr.id}. Сформирован договор купли-продажи #{psa_contract.contract_number}.",
+            type="request_status_changed",
+            entity_id=sr.id,
         ))
     else:
         status_labels = {
@@ -611,6 +621,8 @@ async def update_supplier_request_status(
             user_id=sr.lessor_id,
             title="Статус заявки на покупку обновлён",
             text=f"Заявка на покупку #{sr.id} {status_labels.get(data.status, 'обновлена')}.",
+            type="request_status_changed",
+            entity_id=sr.id,
         ))
 
     await db.flush()
@@ -634,6 +646,8 @@ async def create_contract(
             user_id=data.lessee_id,
             title="Новый договор",
             text=f"Сформирован договор #{data.contract_number}.",
+            type="contract_status_changed",
+            entity_id=contract.id,
         ))
     await db.flush()
     return await _contract_out(db, contract)
@@ -751,6 +765,8 @@ async def update_contract_status(
             user_id=uid,
             title="Статус договора обновлён",
             text=f"Договор #{contract.contract_number} получил статус: {data.status.value}.",
+            type="contract_status_changed",
+            entity_id=contract.id,
         ))
     await db.flush()
     return await _contract_out(db, contract)
@@ -1215,6 +1231,8 @@ async def create_purchase_contract(
         user_id=data.supplier_id,
         title="Запрос на покупку техники",
         text="Лизинговая компания хочет приобрести технику. Проверьте чат.",
+        type="chat_new_message",
+        entity_id=chat.id,
     ))
     await db.flush()
     return pc

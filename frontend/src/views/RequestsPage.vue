@@ -27,7 +27,15 @@
     <template v-if="!loading && showLeaseRequests">
       <div v-if="requests.length === 0" class="text-center py-16 text-gray-500">Заявок пока нет</div>
       <div v-else class="space-y-3">
-        <div v-for="r in requests" :key="r.id" class="card p-5">
+        <div
+          v-for="r in requests"
+          :key="r.id"
+          :id="`lease-request-${r.id}`"
+          :class="[
+            'card p-5 transition-all',
+            highlightedLeaseRequestId === r.id ? 'ring-2 ring-primary-400 bg-primary-50' : '',
+          ]"
+        >
           <div class="flex items-start justify-between">
             <div>
               <div class="flex items-center gap-3">
@@ -73,7 +81,15 @@
     <template v-if="!loading && showSupplierRequests">
       <div v-if="supplierRequests.length === 0" class="text-center py-16 text-gray-500">Заявок на покупку пока нет</div>
       <div v-else class="space-y-3">
-        <div v-for="sr in supplierRequests" :key="sr.id" class="card p-5">
+        <div
+          v-for="sr in supplierRequests"
+          :key="sr.id"
+          :id="`supplier-request-${sr.id}`"
+          :class="[
+            'card p-5 transition-all',
+            highlightedSupplierRequestId === sr.id ? 'ring-2 ring-primary-400 bg-primary-50' : '',
+          ]"
+        >
           <div class="flex items-start justify-between">
             <div>
               <div class="flex items-center gap-3">
@@ -117,7 +133,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { leasingApi } from '@/api/leasing'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -128,12 +145,17 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()
+const route = useRoute()
 
 const requests = ref([])
 const supplierRequests = ref([])
 const loading = ref(true)
 const statusFilter = ref('')
 const tab = ref('lease')
+const pendingFocusRequestId = ref(null)
+const highlightedLeaseRequestId = ref(null)
+const highlightedSupplierRequestId = ref(null)
+let highlightTimer = null
 
 const showLeaseRequests = computed(() => {
   if (auth.userRole === 'supplier') return false
@@ -147,25 +169,89 @@ const showSupplierRequests = computed(() => {
   return false
 })
 
-onMounted(() => fetchData())
 watch(tab, () => fetchData())
+watch(
+  () => route.query.focusRequestId,
+  (value) => {
+    pendingFocusRequestId.value = parseFocusRequestId(value)
+    fetchData()
+  },
+  { immediate: true },
+)
+
+function parseFocusRequestId(value) {
+  const raw = Array.isArray(value) ? value[0] : value
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function applyHighlight(leaseRequestId, supplierRequestId) {
+  highlightedLeaseRequestId.value = leaseRequestId
+  highlightedSupplierRequestId.value = supplierRequestId
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    highlightedLeaseRequestId.value = null
+    highlightedSupplierRequestId.value = null
+  }, 2500)
+}
+
+async function focusRequestIfNeeded() {
+  const requestId = pendingFocusRequestId.value
+  if (!requestId) return
+
+  const leaseMatch = requests.value.some((r) => r.id === requestId)
+  const supplierMatch = supplierRequests.value.some((sr) => sr.id === requestId)
+
+  if (auth.userRole === 'lease_manager') {
+    if (leaseMatch && tab.value !== 'lease') {
+      tab.value = 'lease'
+      return
+    }
+    if (supplierMatch && tab.value !== 'purchase') {
+      tab.value = 'purchase'
+      return
+    }
+  }
+
+  const targetElementId = leaseMatch
+    ? `lease-request-${requestId}`
+    : supplierMatch
+      ? `supplier-request-${requestId}`
+      : null
+  if (!targetElementId) return
+
+  const cardElement = document.getElementById(targetElementId)
+  if (!cardElement) return
+
+  cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  applyHighlight(leaseMatch ? requestId : null, supplierMatch ? requestId : null)
+  pendingFocusRequestId.value = null
+}
 
 async function fetchData() {
   loading.value = true
   try {
+    const hasFocusRequest = Boolean(pendingFocusRequestId.value)
+    const shouldLoadBothForFocus = auth.userRole === 'lease_manager' && hasFocusRequest
     const params = { limit: 50 }
-    if (statusFilter.value) params.status = statusFilter.value
+    if (statusFilter.value && !hasFocusRequest) params.status = statusFilter.value
 
-    if (showLeaseRequests.value) {
+    if (showLeaseRequests.value || shouldLoadBothForFocus) {
       const { data } = await leasingApi.listRequests(params)
       requests.value = data
+    } else {
+      requests.value = []
     }
-    if (showSupplierRequests.value) {
+    if (showSupplierRequests.value || shouldLoadBothForFocus) {
       const { data } = await leasingApi.listSupplierRequests(params)
       supplierRequests.value = data
+    } else {
+      supplierRequests.value = []
     }
   } finally {
     loading.value = false
+    await nextTick()
+    await focusRequestIfNeeded()
   }
 }
 

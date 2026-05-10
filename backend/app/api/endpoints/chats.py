@@ -159,6 +159,8 @@ async def _send_message_and_notify(
             user_id=part.user_id,
             title="Новое сообщение",
             text=f"Вам пришло новое сообщение в чате #{chat_id}.",
+            type="chat_new_message",
+            entity_id=chat_id,
         ))
 
     await db.flush()
