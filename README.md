@@ -33,6 +33,21 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+#### Полный reset и seed тестовых данных
+
+```bash
+cd backend
+python -m app.scripts.seed_full
+```
+
+Если backend запущен в Docker Compose, можно выполнить ту же команду прямо в контейнере:
+
+```bash
+docker exec fleetlease-backend python -m app.scripts.seed_full
+```
+
+Команда полностью очищает прикладные данные базы и заново создает демонстрационный набор пользователей, банковских счетов и объявлений.
+
 #### Frontend
 
 ```bash
