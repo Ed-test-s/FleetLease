@@ -117,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { leasingApi } from '@/api/leasing'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -198,6 +198,8 @@ async function loadPaymentData() {
 async function submitPayment() {
   processing.value = true
   clearInterval(timerInterval)
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 
   await new Promise(resolve => setTimeout(resolve, 2500))
 

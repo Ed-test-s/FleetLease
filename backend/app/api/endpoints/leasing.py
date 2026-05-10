@@ -612,6 +612,17 @@ async def update_supplier_request_status(
             type="contract_status_changed",
             entity_id=psa_contract.id,
         ))
+        if psa_contract.lessee_id:
+            db.add(Notification(
+                user_id=psa_contract.lessee_id,
+                title="Создан договор купли-продажи (ДКП)",
+                text=(
+                    f"По вашей заявке на лизинг #{sr.lease_request_id} сформирован договор купли-продажи "
+                    f"#{psa_contract.contract_number}. Откройте карточку договора для подтверждения реквизитов и дальнейших шагов."
+                ),
+                type="contract_status_changed",
+                entity_id=psa_contract.id,
+            ))
     else:
         status_labels = {
             SupplierRequestStatus.IN_REVIEW: "взята в работу",
