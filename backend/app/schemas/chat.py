@@ -44,6 +44,7 @@ class ChatOut(BaseModel):
     request_id: int | None = None
     supplier_request_id: int | None = None
     contract_id: int | None = None
+    vehicle_id: int | None = None
     created_at: datetime
     participants: list[ChatParticipantOut] = []
     last_message: MessageOut | None = None

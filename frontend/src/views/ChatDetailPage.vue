@@ -10,13 +10,37 @@
           <span v-else>{{ chatPartnerInitial }}</span>
         </div>
         <div class="min-w-0">
-          <h1 class="text-lg font-bold text-gray-900 truncate">{{ chat.partner.display_name }}</h1>
-          <p v-if="chat.vehicle_name" class="text-xs text-primary-500">Предмет: {{ chat.vehicle_name }}</p>
+          <router-link
+            :to="`/users/${chat.partner.id}`"
+            class="text-lg font-bold text-gray-900 truncate hover:text-primary-500 transition-colors block"
+          >
+            {{ chat.partner.display_name }}
+          </router-link>
+          <router-link
+            v-if="chat.vehicle_name && chat.vehicle_id"
+            :to="`/vehicles/${chat.vehicle_id}`"
+            class="text-xs text-primary-500 hover:underline"
+          >
+            Предмет: {{ chat.vehicle_name }}
+          </router-link>
+          <p v-else-if="chat.vehicle_name" class="text-xs text-primary-500">Предмет: {{ chat.vehicle_name }}</p>
           <p v-else class="text-xs text-gray-500">Чат #{{ route.params.id }}</p>
         </div>
       </div>
       <h1 v-else class="text-lg font-bold text-gray-900">Чат #{{ route.params.id }}</h1>
-      <span v-if="chat" class="badge text-[10px] flex-shrink-0" :class="chat.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'">
+      <router-link
+        v-if="chat && chatRequestFocusId"
+        :to="{ path: '/requests', query: { focusRequestId: String(chatRequestFocusId) } }"
+        class="badge text-[10px] flex-shrink-0 hover:opacity-90 transition-opacity"
+        :class="chat.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'"
+      >
+        {{ chatTypeBadge }}
+      </router-link>
+      <span
+        v-else-if="chat"
+        class="badge text-[10px] flex-shrink-0"
+        :class="chat.chat_type === 'request' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'"
+      >
         {{ chatTypeBadge }}
       </span>
 
@@ -82,6 +106,12 @@ const chatTypeBadge = computed(() => {
     return c.supplier_request_id != null ? `Закупка #${c.supplier_request_id}` : 'Закупка'
   }
   return c.supplier_request_id != null ? `Поставщик #${c.supplier_request_id}` : 'Поставщик'
+})
+
+const chatRequestFocusId = computed(() => {
+  const c = chat.value
+  if (!c) return null
+  return c.request_id ?? c.supplier_request_id ?? null
 })
 
 onMounted(async () => {

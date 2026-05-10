@@ -7,6 +7,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.chat import Chat, ChatParticipant, Message
+from app.models.leasing import Contract, ContractType
 from app.models.leasing import LeaseRequest, SupplierRequest
 from app.models.notification import Notification
 from app.models.user import User
@@ -54,9 +55,23 @@ async def _chat_out_with_partner(
         sr_res = await db.execute(select(SupplierRequest.vehicle_id).where(SupplierRequest.id == chat.supplier_request_id))
         vehicle_id = sr_res.scalar_one_or_none()
 
+    co.vehicle_id = vehicle_id
     if vehicle_id:
         vres = await db.execute(select(Vehicle.name).where(Vehicle.id == vehicle_id))
         co.vehicle_name = vres.scalar_one_or_none()
+
+    # For request chats, ensure legacy chats also expose lease contract link.
+    if not co.contract_id and chat.request_id:
+        contract_res = await db.execute(
+            select(Contract.id)
+            .where(
+                Contract.request_id == chat.request_id,
+                Contract.contract_type == ContractType.LEASE,
+            )
+            .order_by(Contract.id.desc())
+            .limit(1)
+        )
+        co.contract_id = contract_res.scalar_one_or_none()
 
     return co
 
