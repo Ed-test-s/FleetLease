@@ -71,8 +71,8 @@
 
         <!-- Financial info -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
-          <div><span class="text-gray-400 block">Общая сумма</span><span class="font-semibold">{{ formatPrice(contract.total_amount) }}</span></div>
-          <div v-if="contract.contract_type === 'lease'"><span class="text-gray-400 block">Аванс</span><span class="font-semibold">{{ formatPrice(contract.prepayment) }}</span></div>
+          <div><span class="text-gray-400 block">Общая сумма</span><span class="font-semibold">{{ formatContractAmount(contract.total_amount) }}</span></div>
+          <div v-if="contract.contract_type === 'lease'"><span class="text-gray-400 block">Аванс</span><span class="font-semibold">{{ formatContractAmount(contract.prepayment) }}</span></div>
           <div v-if="contract.contract_type === 'lease'"><span class="text-gray-400 block">Ставка</span><span class="font-semibold">{{ contract.interest_rate }}%</span></div>
           <div><span class="text-gray-400 block">Кол-во техники</span><span class="font-semibold">{{ contract.quantity }} шт.</span></div>
         </div>
@@ -296,12 +296,12 @@
               <tr v-for="(s, i) in schedule" :key="s.id" class="border-b border-surface-100">
                 <td class="py-3 pr-4 text-gray-400">{{ i + 1 }}</td>
                 <td class="py-3 pr-4">{{ formatDate(s.payment_date) }}</td>
-                <td class="py-3 pr-4 font-medium">{{ formatPrice(s.total_amount) }}</td>
-                <td class="py-3 pr-4">{{ formatPrice(s.vat_amount) }}</td>
-                <td class="py-3 pr-4">{{ formatPrice(s.principal_amount) }}</td>
-                <td class="py-3 pr-4">{{ formatPrice(s.interest_amount) }}</td>
-                <td class="py-3 pr-4">{{ formatPrice(s.interest_vat_amount) }}</td>
-                <td class="py-3 pr-4">{{ formatPrice(s.remaining_debt) }}</td>
+                <td class="py-3 pr-4 font-medium">{{ formatContractAmount(s.total_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatContractAmount(s.vat_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatContractAmount(s.principal_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatContractAmount(s.interest_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatContractAmount(s.interest_vat_amount) }}</td>
+                <td class="py-3 pr-4">{{ formatContractAmount(s.remaining_debt) }}</td>
                 <td class="py-3 pr-4">
                   <template v-if="auth.userRole === 'client'">
                     <button
@@ -425,6 +425,10 @@ const currentVatRateLabel = computed(() => {
   if (Number.isInteger(value)) return String(value)
   return String(value)
 })
+
+function formatContractAmount(value) {
+  return formatPrice(value, contract.value?.currency || 'BYN')
+}
 
 function goToContract(id) {
   if (id == null) return

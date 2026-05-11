@@ -8,7 +8,7 @@ router = APIRouter(tags=["exchange-rates"])
 
 @router.get("/exchange-rates", response_model=ExchangeRatesOut)
 async def get_exchange_rates():
-    """Официальные курсы НБ РБ: BYN (база), USD, EUR."""
+    """Официальные курсы НБ РБ: BYN (база), USD, EUR, RUB."""
     try:
         raw = await nbrb_rates_svc.get_exchange_rates_payload()
     except Exception as e:

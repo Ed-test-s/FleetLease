@@ -20,7 +20,7 @@ _cache_valid_until: datetime | None = None
 @dataclass(frozen=True)
 class NbrbRateRow:
     code: str
-    """Буквенный код ISO (USD, EUR)."""
+    """Буквенный код ISO (USD, EUR, RUB)."""
     rate_byn_per_unit: float
     """Сколько BYN за 1 единицу иностранной валюты (с учётом Cur_Scale)."""
     scale: int
@@ -65,14 +65,15 @@ async def _fetch_one_iso(client: httpx.AsyncClient, iso_code: str) -> NbrbRateRo
     return _parse_rate_row(_normalize_rate_payload(resp.json()))
 
 
-async def fetch_nbrb_rates() -> tuple[NbrbRateRow, NbrbRateRow]:
-    """Загружает курсы USD и EUR с НБ РБ."""
+async def fetch_nbrb_rates() -> tuple[NbrbRateRow, NbrbRateRow, NbrbRateRow]:
+    """Загружает курсы USD, EUR и RUB с НБ РБ."""
     timeout = httpx.Timeout(settings.NBRB_REQUEST_TIMEOUT)
     async with httpx.AsyncClient(timeout=timeout) as client:
         usd_task = asyncio.create_task(_fetch_one_iso(client, "USD"))
         eur_task = asyncio.create_task(_fetch_one_iso(client, "EUR"))
-        usd, eur = await asyncio.gather(usd_task, eur_task)
-        return usd, eur
+        rub_task = asyncio.create_task(_fetch_one_iso(client, "RUB"))
+        usd, eur, rub = await asyncio.gather(usd_task, eur_task, rub_task)
+        return usd, eur, rub
 
 
 def _cache_stale() -> bool:
@@ -83,7 +84,7 @@ def _cache_stale() -> bool:
 
 async def get_exchange_rates_payload() -> dict[str, Any]:
     """
-    Возвращает структуру для API: курсы BYN (база), USD, EUR.
+    Возвращает структуру для API: курсы BYN (база), USD, EUR, RUB.
     При ошибке сети отдаёт последний успешный кэш, если он есть.
     """
     global _nbrb_cache, _cache_valid_until
@@ -92,8 +93,8 @@ async def get_exchange_rates_payload() -> dict[str, Any]:
         return _nbrb_cache
 
     try:
-        usd, eur = await fetch_nbrb_rates()
-        rate_date = max(usd.date, eur.date)
+        usd, eur, rub = await fetch_nbrb_rates()
+        rate_date = max(usd.date, eur.date, rub.date)
         payload = {
             "rate_date": rate_date.isoformat(),
             "currencies": [
@@ -111,6 +112,11 @@ async def get_exchange_rates_payload() -> dict[str, Any]:
                     "code": eur.code or "EUR",
                     "flag": "🇪🇺",
                     "rate_byn_per_unit": round(eur.rate_byn_per_unit, 6),
+                },
+                {
+                    "code": rub.code or "RUB",
+                    "flag": "🇷🇺",
+                    "rate_byn_per_unit": round(rub.rate_byn_per_unit, 6),
                 },
             ],
         }

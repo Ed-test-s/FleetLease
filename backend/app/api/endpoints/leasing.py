@@ -32,6 +32,7 @@ from app.services.contract_document import (
     generate_psa_document,
     upload_contract_document,
 )
+from app.services import nbrb_rates as nbrb_rates_svc
 from app.services.banking_requisites import ensure_user_has_bank_requisites
 from app.services.settings_service import get_vat_rate_percent
 from app.services.user_display import user_display_name
@@ -58,9 +59,120 @@ from app.schemas.leasing import (
 )
 
 router = APIRouter(prefix="/leasing", tags=["leasing"])
+SUPPORTED_CONTRACT_CURRENCIES = {"BYN", "USD", "EUR", "RUB"}
+SCHEDULE_MONEY_FIELDS = (
+    "total_amount",
+    "principal_amount",
+    "interest_amount",
+    "vat_amount",
+    "interest_vat_amount",
+    "remaining_debt",
+)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
+def _normalize_currency_code(code: str | None) -> str:
+    cur = (code or "BYN").strip().upper()
+    return cur or "BYN"
+
+
+def _validate_currency_code(code: str) -> str:
+    normalized = _normalize_currency_code(code)
+    if normalized not in SUPPORTED_CONTRACT_CURRENCIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неподдерживаемая валюта договора: {code}",
+        )
+    return normalized
+
+
+def _reset_contract_confirmations(contract: Contract) -> None:
+    contract.lessee_confirmed = False
+    contract.lessor_confirmed = False
+    contract.supplier_confirmed = False
+    contract.all_confirmed = False
+
+
+def _convert_amount(
+    amount: float | int | None,
+    from_currency: str,
+    to_currency: str,
+    rates: dict[str, float],
+) -> float:
+    value = float(amount or 0.0)
+    if from_currency == to_currency:
+        return round(value, 2)
+    from_rate = rates.get(from_currency)
+    to_rate = rates.get(to_currency)
+    if not from_rate or not to_rate:
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось получить курс для конвертации валюты договора.",
+        )
+    amount_byn = value * from_rate
+    converted = amount_byn / to_rate
+    return round(converted, 2)
+
+
+async def _load_exchange_rates_map() -> dict[str, float]:
+    raw = await nbrb_rates_svc.get_exchange_rates_payload()
+    rates: dict[str, float] = {}
+    for row in raw.get("currencies", []):
+        code = _normalize_currency_code(str(row.get("code") or ""))
+        rate = float(row.get("rate_byn_per_unit") or 0.0)
+        if code and rate > 0:
+            rates[code] = rate
+    rates["BYN"] = 1.0
+    missing = [c for c in SUPPORTED_CONTRACT_CURRENCIES if c not in rates]
+    if missing:
+        raise HTTPException(
+            status_code=503,
+            detail=f"В сервисе курсов отсутствуют валюты: {', '.join(sorted(missing))}",
+        )
+    return rates
+
+
+async def _convert_schedule_currency(
+    db: AsyncSession,
+    contract_id: int,
+    from_currency: str,
+    to_currency: str,
+    rates: dict[str, float],
+) -> None:
+    sched_res = await db.execute(
+        select(PaymentSchedule).where(PaymentSchedule.contract_id == contract_id)
+    )
+    for row in sched_res.scalars().all():
+        for field in SCHEDULE_MONEY_FIELDS:
+            current = getattr(row, field)
+            setattr(row, field, _convert_amount(current, from_currency, to_currency, rates))
+
+
+async def _recalculate_contract_currency(
+    db: AsyncSession,
+    contract: Contract,
+    new_currency: str,
+    rates: dict[str, float],
+) -> None:
+    old_currency = _normalize_currency_code(contract.currency)
+    if old_currency != new_currency:
+        contract.total_amount = _convert_amount(
+            contract.total_amount, old_currency, new_currency, rates
+        )
+        contract.prepayment = _convert_amount(
+            contract.prepayment, old_currency, new_currency, rates
+        )
+        if contract.contract_type == ContractType.LEASE:
+            await _convert_schedule_currency(
+                db,
+                contract.id,
+                old_currency,
+                new_currency,
+                rates,
+            )
+    contract.currency = new_currency
+    _reset_contract_confirmations(contract)
 
 async def _load_users_map(db: AsyncSession, user_ids: set[int]) -> dict[int, User]:
     if not user_ids:
@@ -418,6 +530,7 @@ async def update_request_status(
             total_amount=total_amount,
             prepayment=req.prepayment,
             interest_rate=interest_rate,
+            currency="BYN",
             quantity=1,
         )
         db.add(contract)
@@ -592,6 +705,7 @@ async def update_supplier_request_status(
             total_amount=round(price * sr.quantity, 2),
             prepayment=0,
             interest_rate=0,
+            currency="BYN",
             quantity=sr.quantity,
             status=ContractStatus.ACTIVE,
         )
@@ -820,7 +934,23 @@ async def update_contract_fields(
         if data.signing_city is not None:
             contract.signing_city = data.signing_city
         if data.currency is not None:
-            contract.currency = data.currency
+            new_currency = _validate_currency_code(data.currency)
+            rates = await _load_exchange_rates_map()
+            contracts_to_recalc: list[Contract] = [contract]
+            if contract.request_id:
+                linked_res = await db.execute(
+                    select(Contract).where(Contract.request_id == contract.request_id)
+                )
+                linked_contracts = linked_res.scalars().all()
+                if linked_contracts:
+                    contracts_to_recalc = linked_contracts
+            for linked_contract in contracts_to_recalc:
+                await _recalculate_contract_currency(
+                    db,
+                    linked_contract,
+                    new_currency,
+                    rates,
+                )
         if data.bank_account_id is not None:
             ba_res = await db.execute(
                 select(BankAccount).where(BankAccount.id == data.bank_account_id, BankAccount.user_id == user.id)
@@ -867,10 +997,7 @@ async def update_contract_fields(
     else:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    contract.lessee_confirmed = False
-    contract.lessor_confirmed = False
-    contract.supplier_confirmed = False
-    contract.all_confirmed = False
+    _reset_contract_confirmations(contract)
 
     await db.flush()
     return await _contract_out(db, contract)
@@ -956,12 +1083,12 @@ async def generate_schedule(
     if not req:
         raise HTTPException(status_code=400, detail="Связанная заявка не найдена")
 
-    vehicle = await db.get(Vehicle, contract.vehicle_id)
-    price = float(vehicle.price) if vehicle else 0.0
     prepayment = float(contract.prepayment)
     r_pct = float(contract.interest_rate)
-    f = _lease_financed_amount(price, prepayment)
-    financed_repay = f * (1.0 + r_pct / 100.0)
+    total_amount = float(contract.total_amount or 0.0)
+    financed_repay = max(0.0, total_amount - prepayment)
+    denominator = 1.0 + r_pct / 100.0
+    f = financed_repay / denominator if denominator > 0 else 0.0
     n = req.lease_term
     if n < 1:
         raise HTTPException(status_code=400, detail="Срок лизинга в заявке не задан")

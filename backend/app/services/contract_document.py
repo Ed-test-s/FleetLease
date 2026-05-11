@@ -630,9 +630,11 @@ def generate_psa_document(contract, vehicle, supplier_user, lessor_user, lessee_
 
     vat_rate = contract.vat_rate or 20
     currency = contract.currency or "BYN"
-    price = vehicle.price if vehicle else 0
-    quantity = contract.quantity or 1
-    total_price = price * quantity
+    quantity = max(int(contract.quantity or 1), 1)
+    total_price = float(contract.total_amount or 0.0)
+    if total_price <= 0:
+        fallback_unit_price = float(vehicle.price) if vehicle else 0.0
+        total_price = fallback_unit_price * quantity
     vat_amount = round(total_price * vat_rate / 100, 2)
     price_without_vat = round(total_price - vat_amount, 2)
     half_price = round(total_price / 2, 2)
@@ -759,8 +761,16 @@ def generate_la_document(
 
     vat_rate = contract.vat_rate or 20
     currency = contract.currency or "BYN"
-    price = vehicle.price if vehicle else 0
-    total = contract.total_amount or 0
+    fallback_price = float(vehicle.price) if vehicle else 0.0
+    total = float(contract.total_amount or 0.0)
+    prepayment = float(contract.prepayment or 0.0)
+    interest_rate = float(contract.interest_rate or 0.0)
+    denominator = 1.0 + (interest_rate / 100.0)
+    if denominator > 0:
+        financed_part = max(0.0, total - prepayment)
+        price = round(prepayment + financed_part / denominator, 2)
+    else:
+        price = round(fallback_price, 2)
     vat_on_total = round(total * vat_rate / 100, 2)
     vat_on_price = round(price * vat_rate / 100, 2)
     price_without_vat = round(price - vat_on_price, 2)

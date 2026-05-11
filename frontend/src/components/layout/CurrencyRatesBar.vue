@@ -51,7 +51,7 @@
       <p v-else class="text-xs text-gray-500 py-2">Загрузка…</p>
 
       <p class="text-[11px] text-gray-500 mt-3 leading-snug">
-        Значение для USD и EUR — сколько белорусских рублей стоит один доллар или один евро по официальному курсу НБ РБ.
+        Значение для USD, EUR и RUB — сколько белорусских рублей стоит одна единица соответствующей валюты по официальному курсу НБ РБ.
       </p>
     </div>
   </div>
@@ -73,6 +73,7 @@ const foreignRows = computed(() => (currencies.value || []).filter((c) => c.code
 const CURRENCY_TO_FLAG_SUFFIX = {
   USD: 'us',
   EUR: 'eu',
+  RUB: 'ru',
   BYN: 'by',
 }
 

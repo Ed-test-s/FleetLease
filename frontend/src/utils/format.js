@@ -1,10 +1,21 @@
-export function formatPrice(value) {
+export function formatPrice(value, currency = 'BYN') {
   if (value == null) return '—'
-  return new Intl.NumberFormat('ru-BY', {
-    style: 'currency',
-    currency: 'BYN',
-    minimumFractionDigits: 2,
-  }).format(value)
+  const normalizedCurrency = String(currency || 'BYN').toUpperCase()
+  try {
+    return new Intl.NumberFormat('ru-BY', {
+      style: 'currency',
+      currency: normalizedCurrency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return new Intl.NumberFormat('ru-BY', {
+      style: 'currency',
+      currency: 'BYN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
 }
 
 export function formatUsdAmount(value) {
