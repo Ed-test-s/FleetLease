@@ -69,6 +69,7 @@ class LeaseRequest(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     lease_company_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     lease_term: Mapped[int] = mapped_column(Integer, nullable=False)
     prepayment: Mapped[float] = mapped_column(Float, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)

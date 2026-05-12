@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.leasing import (
     ContractStatus,
@@ -17,6 +17,7 @@ from app.models.leasing import (
 class LeaseRequestCreate(BaseModel):
     lease_company_id: int
     vehicle_id: int
+    quantity: int = Field(default=1, ge=1)
     lease_term: int
     prepayment: float
     comment: str | None = None
@@ -27,6 +28,7 @@ class LeaseRequestOut(BaseModel):
     user_id: int
     lease_company_id: int
     vehicle_id: int
+    quantity: int
     lease_term: int
     prepayment: float
     comment: str | None = None
@@ -46,7 +48,7 @@ class LeaseRequestStatusUpdate(BaseModel):
 class SupplierRequestCreate(BaseModel):
     lease_request_id: int
     vehicle_id: int
-    quantity: int = 1
+    quantity: int = Field(default=1, ge=1)
 
 
 class SupplierRequestOut(BaseModel):

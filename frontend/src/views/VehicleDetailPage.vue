@@ -235,6 +235,20 @@
               </p>
             </div>
             <div>
+              <label class="label">Количество техники (шт.)</label>
+              <input
+                v-model.number="requestForm.quantity"
+                type="number"
+                class="input-field"
+                min="1"
+                :max="vehicle?.count || 1"
+                required
+              />
+              <p class="text-xs text-gray-400 mt-1">
+                Доступно к заказу: {{ vehicle?.count || 0 }} шт.
+              </p>
+            </div>
+            <div>
               <label class="label">Первоначальный взнос (BYN)</label>
               <input
                 v-model.number="requestForm.prepayment"
@@ -273,7 +287,7 @@
               <select v-model.number="purchaseForm.lease_request_id" class="input-field" required>
                 <option value="" disabled>Выберите заявку</option>
                 <option v-for="lr in myLeaseRequests" :key="lr.id" :value="lr.id">
-                  Заявка #{{ lr.id }} — {{ lr.vehicle_name || `Объявление #${lr.vehicle_id}` }}
+                  Заявка #{{ lr.id }} — {{ lr.vehicle_name || `Объявление #${lr.vehicle_id}` }} · {{ lr.quantity || 1 }} шт.
                 </option>
               </select>
               <p class="text-xs text-gray-400 mt-1">Выберите заявку лизингополучателя, в рамках которой покупается техника</p>
@@ -328,7 +342,7 @@ const lessors = ref([])
 const lessorsLoading = ref(false)
 const lessorSearch = ref('')
 const selectedLessor = ref(null)
-const requestForm = ref({ lease_term: 24, prepayment: 0, comment: '' })
+const requestForm = ref({ lease_term: 24, quantity: 1, prepayment: 0, comment: '' })
 const requestLoading = ref(false)
 
 const showPurchaseModal = ref(false)
@@ -359,47 +373,57 @@ const filteredLessors = computed(() => {
     l.login?.toLowerCase().includes(s)
   )
 })
+const selectedPurchaseLeaseRequest = computed(() =>
+  myLeaseRequests.value.find((lr) => lr.id === purchaseForm.value.lease_request_id) || null,
+)
 
 const requestTermMin = computed(() => selectedLessor.value?.lease_terms?.min_term_months ?? 6)
 const requestTermMax = computed(() => selectedLessor.value?.lease_terms?.max_term_months ?? 84)
 const requestPrepaymentMin = computed(() => {
   const lt = selectedLessor.value?.lease_terms
   const price = vehicle.value?.price
+  const quantity = requestForm.value.quantity || 1
   if (!lt || price == null) return 0
-  return Math.round((price * lt.min_prepayment_pct) / 100 * 100) / 100
+  return Math.round((price * quantity * lt.min_prepayment_pct) / 100 * 100) / 100
 })
 const requestPrepaymentMax = computed(() => {
   const lt = selectedLessor.value?.lease_terms
   const price = vehicle.value?.price
+  const quantity = requestForm.value.quantity || 1
   if (!lt || price == null) return 0
-  return Math.round((price * lt.max_prepayment_pct) / 100 * 100) / 100
+  return Math.round((price * quantity * lt.max_prepayment_pct) / 100 * 100) / 100
 })
 
 function lessorEligible(l) {
   const lt = l.lease_terms
   const price = vehicle.value?.price
+  const quantity = requestForm.value.quantity || 1
   if (price == null) return false
   if (!lt) return true
-  return price >= lt.min_asset_price && price <= lt.max_asset_price
+  const totalPrice = price * quantity
+  return totalPrice >= lt.min_asset_price && totalPrice <= lt.max_asset_price
 }
 
 function initRequestForm() {
   const l = selectedLessor.value
   const lt = l?.lease_terms
   const price = vehicle.value?.price ?? 0
+  const quantity = 1
   if (!lt || !price) {
-    requestForm.value = { lease_term: 24, prepayment: 0, comment: '' }
+    requestForm.value = { lease_term: 24, quantity, prepayment: 0, comment: '' }
     return
   }
+  const totalPrice = price * quantity
   let term = Math.round((lt.min_term_months + lt.max_term_months) / 2)
   term = Math.min(lt.max_term_months, Math.max(lt.min_term_months, term))
   const midPct = (lt.min_prepayment_pct + lt.max_prepayment_pct) / 2
-  let prep = (price * midPct) / 100
-  const pMin = (price * lt.min_prepayment_pct) / 100
-  const pMax = (price * lt.max_prepayment_pct) / 100
+  let prep = (totalPrice * midPct) / 100
+  const pMin = (totalPrice * lt.min_prepayment_pct) / 100
+  const pMax = (totalPrice * lt.max_prepayment_pct) / 100
   prep = Math.min(pMax, Math.max(pMin, prep))
   requestForm.value = {
     lease_term: term,
+    quantity,
     prepayment: Math.round(prep * 100) / 100,
     comment: '',
   }
@@ -514,7 +538,7 @@ async function submitPurchaseRequest() {
     await leasingApi.createSupplierRequest({
       lease_request_id: purchaseForm.value.lease_request_id,
       vehicle_id: vehicle.value.id,
-      quantity: 1,
+      quantity: selectedPurchaseLeaseRequest.value?.quantity || 1,
     })
     purchaseForm.value = { lease_request_id: '' }
     showPurchaseModal.value = false
@@ -534,6 +558,16 @@ async function submitRequest() {
   const lt = selectedLessor.value?.lease_terms
   const price = vehicle.value?.price
   if (lt && price != null) {
+    const quantity = Number(requestForm.value.quantity || 0)
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      notifStore.showToast('Укажите корректное количество техники', 'error')
+      return
+    }
+    if (quantity > (vehicle.value?.count || 0)) {
+      notifStore.showToast('Указано количество больше доступного в наличии', 'error')
+      return
+    }
+    const totalPrice = price * quantity
     const t = requestForm.value.lease_term
     if (t < lt.min_term_months || t > lt.max_term_months) {
       notifStore.showToast('Укажите срок лизинга в допустимом диапазоне', 'error')
@@ -544,12 +578,17 @@ async function submitRequest() {
       notifStore.showToast('Укажите первоначальный взнос в допустимом диапазоне', 'error')
       return
     }
+    if (totalPrice < lt.min_asset_price || totalPrice > lt.max_asset_price) {
+      notifStore.showToast('Общая стоимость техники не входит в диапазон условий лизингодателя', 'error')
+      return
+    }
   }
   requestLoading.value = true
   try {
     await leasingApi.createRequest({
       lease_company_id: selectedLessor.value.id,
       vehicle_id: vehicle.value.id,
+      quantity: requestForm.value.quantity,
       lease_term: requestForm.value.lease_term,
       prepayment: requestForm.value.prepayment,
       comment: requestForm.value.comment,

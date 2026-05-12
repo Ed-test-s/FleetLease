@@ -57,6 +57,7 @@
                   Лизинговая компания:
                   <router-link :to="`/users/${r.lease_company_id}`" class="text-primary-500 hover:underline">{{ r.lease_company_label }}</router-link>
                 </p>
+                <p>Количество: {{ r.quantity || 1 }} шт.</p>
                 <p>Срок: {{ r.lease_term }} мес. · Аванс: {{ formatPrice(r.prepayment) }}</p>
                 <p v-if="r.comment" class="text-gray-400 italic">{{ r.comment }}</p>
                 <p class="text-xs text-gray-400">{{ formatDateTime(r.created_at) }}</p>

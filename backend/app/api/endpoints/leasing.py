@@ -392,6 +392,11 @@ async def create_request(
     vehicle = await db.get(Vehicle, data.vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
+    if data.quantity > max(int(vehicle.count or 0), 0):
+        raise HTTPException(
+            status_code=400,
+            detail="Запрошенное количество техники превышает количество в наличии по объявлению.",
+        )
 
     await ensure_user_has_bank_requisites(
         db,
@@ -401,8 +406,9 @@ async def create_request(
 
     lt_result = await db.execute(select(LeaseTerm).where(LeaseTerm.user_id == data.lease_company_id))
     lt = lt_result.scalar_one_or_none()
+    asset_price = float(vehicle.price or 0.0) * data.quantity
     if lt:
-        if vehicle.price < lt.min_asset_price or vehicle.price > lt.max_asset_price:
+        if asset_price < lt.min_asset_price or asset_price > lt.max_asset_price:
             raise HTTPException(
                 status_code=400,
                 detail="Стоимость техники не входит в допустимый для выбранного лизингодателя диапазон",
@@ -412,8 +418,8 @@ async def create_request(
                 status_code=400,
                 detail="Срок лизинга вне допустимого диапазона для выбранного лизингодателя",
             )
-        min_prep = vehicle.price * lt.min_prepayment_pct / 100.0
-        max_prep = vehicle.price * lt.max_prepayment_pct / 100.0
+        min_prep = asset_price * lt.min_prepayment_pct / 100.0
+        max_prep = asset_price * lt.max_prepayment_pct / 100.0
         if data.prepayment < min_prep - 0.01 or data.prepayment > max_prep + 0.01:
             raise HTTPException(
                 status_code=400,
@@ -514,7 +520,8 @@ async def update_request_status(
         lt_res = await db.execute(select(LeaseTerm).where(LeaseTerm.user_id == req.lease_company_id))
         lt = lt_res.scalar_one_or_none()
         interest_rate = lt.interest_rate if lt else 12.0
-        price = vehicle.price if vehicle else 0
+        quantity = max(int(req.quantity or 1), 1)
+        price = (float(vehicle.price) if vehicle else 0.0) * quantity
         total_amount = round(
             _lease_contract_total_amount(price, req.prepayment, interest_rate), 2
         )
@@ -531,7 +538,7 @@ async def update_request_status(
             prepayment=req.prepayment,
             interest_rate=interest_rate,
             currency="BYN",
-            quantity=1,
+            quantity=quantity,
         )
         db.add(contract)
         await db.flush()
@@ -582,6 +589,17 @@ async def create_supplier_request(
     lease_req = await db.get(LeaseRequest, data.lease_request_id)
     if not lease_req:
         raise HTTPException(status_code=404, detail="Lease request not found")
+    quantity = max(int(lease_req.quantity or 1), 1)
+    if data.quantity != quantity:
+        raise HTTPException(
+            status_code=400,
+            detail="Количество в заявке поставщику должно совпадать с количеством в заявке на лизинг.",
+        )
+    if quantity > max(int(vehicle.count or 0), 0):
+        raise HTTPException(
+            status_code=400,
+            detail="Недостаточно техники в наличии для создания заявки поставщику.",
+        )
 
     await ensure_user_has_bank_requisites(
         db,
@@ -594,7 +612,7 @@ async def create_supplier_request(
         lessor_id=user.id,
         supplier_id=vehicle.supplier_id,
         vehicle_id=data.vehicle_id,
-        quantity=data.quantity,
+        quantity=quantity,
     )
     db.add(sr)
     await db.flush()
@@ -679,6 +697,16 @@ async def update_supplier_request_status(
         raise HTTPException(status_code=404, detail="Supplier request not found")
     if user.role == UserRole.SUPPLIER and sr.supplier_id != user.id:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    if data.status in (SupplierRequestStatus.IN_REVIEW, SupplierRequestStatus.APPROVED):
+        vehicle = await db.get(Vehicle, sr.vehicle_id)
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        if sr.quantity > max(int(vehicle.count or 0), 0):
+            raise HTTPException(
+                status_code=400,
+                detail="Недостаточно техники в наличии для указанного количества в заявке.",
+            )
 
     if data.status == SupplierRequestStatus.APPROVED:
         await ensure_user_has_bank_requisites(

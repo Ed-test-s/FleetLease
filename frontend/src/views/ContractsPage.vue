@@ -53,8 +53,8 @@
             </div>
             <div class="text-sm text-gray-500 mt-1">
               <p v-if="c.vehicle_name">Техника: {{ c.vehicle_name }}</p>
-              <p v-if="c.contract_type === 'lease'">Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }} · Аванс: {{ formatPrice(c.prepayment, c.currency || 'BYN') }} · Ставка: {{ c.interest_rate }}%</p>
-              <p v-else>Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }}</p>
+              <p v-if="c.contract_type === 'lease'">Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }} · Кол-во: {{ c.quantity || 1 }} шт. · Аванс: {{ formatPrice(c.prepayment, c.currency || 'BYN') }} · Ставка: {{ c.interest_rate }}%</p>
+              <p v-else>Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }} · Кол-во: {{ c.quantity || 1 }} шт.</p>
               <p v-if="c.lessee_label || c.supplier_label" class="text-xs text-gray-400 mt-0.5">
                 <span v-if="c.contract_type === 'lease' && c.lessee_label">Лизингополучатель: {{ c.lessee_label }}</span>
                 <span v-if="c.contract_type === 'purchase_sale' && c.supplier_label">Поставщик: {{ c.supplier_label }}</span>
@@ -84,8 +84,8 @@
           </div>
           <div class="text-sm text-gray-500 mt-1">
             <p v-if="c.vehicle_name">Техника: {{ c.vehicle_name }}</p>
-            <p v-if="c.contract_type === 'lease'">Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }} · Аванс: {{ formatPrice(c.prepayment, c.currency || 'BYN') }} · Ставка: {{ c.interest_rate }}%</p>
-            <p v-else>Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }}</p>
+            <p v-if="c.contract_type === 'lease'">Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }} · Кол-во: {{ c.quantity || 1 }} шт. · Аванс: {{ formatPrice(c.prepayment, c.currency || 'BYN') }} · Ставка: {{ c.interest_rate }}%</p>
+            <p v-else>Сумма: {{ formatPrice(c.total_amount, c.currency || 'BYN') }} · Кол-во: {{ c.quantity || 1 }} шт.</p>
             <p v-if="c.lessee_label || c.supplier_label" class="text-xs text-gray-400 mt-0.5">
               <span v-if="c.contract_type === 'lease' && c.lessee_label">Лизингополучатель: {{ c.lessee_label }}</span>
               <span v-if="c.contract_type === 'purchase_sale' && c.supplier_label">Поставщик: {{ c.supplier_label }}</span>

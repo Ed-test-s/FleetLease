@@ -761,16 +761,20 @@ def generate_la_document(
 
     vat_rate = contract.vat_rate or 20
     currency = contract.currency or "BYN"
-    fallback_price = float(vehicle.price) if vehicle else 0.0
+    quantity = max(int(contract.quantity or 1), 1)
+    fallback_total_price = (float(vehicle.price) if vehicle else 0.0) * quantity
     total = float(contract.total_amount or 0.0)
     prepayment = float(contract.prepayment or 0.0)
     interest_rate = float(contract.interest_rate or 0.0)
+    if total <= 0:
+        financed_part = max(0.0, fallback_total_price - prepayment)
+        total = round(prepayment + financed_part * (1.0 + interest_rate / 100.0), 2)
     denominator = 1.0 + (interest_rate / 100.0)
     if denominator > 0:
         financed_part = max(0.0, total - prepayment)
         price = round(prepayment + financed_part / denominator, 2)
     else:
-        price = round(fallback_price, 2)
+        price = round(fallback_total_price, 2)
     vat_on_total = round(total * vat_rate / 100, 2)
     vat_on_price = round(price * vat_rate / 100, 2)
     price_without_vat = round(price - vat_on_price, 2)
@@ -829,7 +833,7 @@ def generate_la_document(
         "название полностью": _safe(vehicle.name if vehicle else None),
         "год выпуска": _safe(vehicle.release_year if vehicle else None),
         "VIN номер": _safe(vehicle.vin if vehicle else None),
-        "кол-во": str(contract.quantity or 1),
+        "кол-во": str(quantity),
 
         # Financial
         "цена в объявлении": f"{price:.2f}",
