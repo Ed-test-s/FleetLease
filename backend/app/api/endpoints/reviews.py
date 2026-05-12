@@ -25,7 +25,7 @@ async def create_review(
         select(Review).where(Review.author_id == user.id, Review.target_id == data.target_id)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="You have already reviewed this user")
+        raise HTTPException(status_code=400, detail="Вы уже оставили отзыв об этом пользователе.")
 
     review = Review(author_id=user.id, **data.model_dump())
     db.add(review)
