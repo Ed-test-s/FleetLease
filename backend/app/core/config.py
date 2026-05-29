@@ -1,3 +1,7 @@
+import json
+from typing import Any
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -43,6 +47,33 @@ class Settings(BaseSettings):
     MAIL_SSL_TLS: bool = False
     MAIL_USE_CREDENTIALS: bool = True
     MAIL_VALIDATE_CERTS: bool = True
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if not isinstance(parsed, list):
+                    raise ValueError("CORS_ORIGINS JSON value must be a list of origins")
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in raw.split(",") if item.strip()]
+        raise ValueError("Unsupported CORS_ORIGINS format")
+
+    @property
+    def minio_external_base_url(self) -> str:
+        endpoint = self.MINIO_EXTERNAL_ENDPOINT.strip().rstrip("/")
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            return endpoint
+        scheme = "https" if self.MINIO_SECURE else "http"
+        return f"{scheme}://{endpoint}"
 
     class Config:
         env_file = ".env"

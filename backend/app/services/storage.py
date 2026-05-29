@@ -126,7 +126,7 @@ class StorageService:
             length=len(data),
             content_type=file.content_type or "application/octet-stream",
         )
-        return f"http://{settings.MINIO_EXTERNAL_ENDPOINT}/{settings.MINIO_BUCKET}/{object_name}"
+        return f"{settings.minio_external_base_url}/{settings.MINIO_BUCKET}/{object_name}"
 
     async def upload_about_file(self, file: UploadFile, folder: str = "images") -> str:
         self._ensure_about_bucket()
@@ -142,7 +142,7 @@ class StorageService:
             length=len(data),
             content_type=file.content_type or "application/octet-stream",
         )
-        return f"http://{settings.MINIO_EXTERNAL_ENDPOINT}/{settings.MINIO_ABOUT_BUCKET}/{object_name}"
+        return f"{settings.minio_external_base_url}/{settings.MINIO_ABOUT_BUCKET}/{object_name}"
 
 
 storage_service = StorageService()

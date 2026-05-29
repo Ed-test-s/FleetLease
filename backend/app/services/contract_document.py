@@ -915,4 +915,4 @@ def upload_contract_document(buf: BytesIO, folder: str, filename: str) -> str:
         length=len(data),
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
-    return f"http://{settings.MINIO_EXTERNAL_ENDPOINT}/{settings.MINIO_BUCKET}/{object_name}"
+    return f"{settings.minio_external_base_url}/{settings.MINIO_BUCKET}/{object_name}"
