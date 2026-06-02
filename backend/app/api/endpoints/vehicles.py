@@ -4,10 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_optional_user, require_role
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User, UserRole, UserType
 from app.models.vehicle import Vehicle, VehicleCondition, VehicleImage
-from app.schemas.vehicle import VehicleCreate, VehicleListOut, VehicleOut, VehicleSellerOut, VehicleUpdate
+from app.schemas.vehicle import VehicleCreate, VehicleImageOut, VehicleListOut, VehicleOut, VehicleSellerOut, VehicleUpdate
 from app.services.storage import storage_service
 from app.services.user_display import user_display_name
 
@@ -42,6 +43,13 @@ def _vehicle_detail_load():
 
 def vehicle_to_out(vehicle: Vehicle) -> VehicleOut:
     out = VehicleOut.model_validate(vehicle)
+    out.images = [
+        VehicleImageOut(
+            id=image.id,
+            image_url=storage_service.to_media_api_url(image.image_url, bucket=settings.MINIO_BUCKET) or image.image_url,
+        )
+        for image in vehicle.images
+    ]
     sup = vehicle.supplier
     if sup is None:
         return out
@@ -51,7 +59,7 @@ def vehicle_to_out(vehicle: Vehicle) -> VehicleOut:
             "seller": VehicleSellerOut(
                 id=sup.id,
                 display_name=display_name,
-                avatar_url=sup.avatar_url,
+                avatar_url=storage_service.to_media_api_url(sup.avatar_url, bucket=settings.MINIO_BUCKET),
             )
         }
     )
@@ -164,7 +172,21 @@ async def list_vehicles(
     q = q.offset(skip).limit(limit)
 
     result = await db.execute(q)
-    return result.scalars().unique().all()
+    vehicles = result.scalars().unique().all()
+    return [
+        VehicleListOut.model_validate(vehicle).model_copy(
+            update={
+                "images": [
+                    VehicleImageOut(
+                        id=image.id,
+                        image_url=storage_service.to_media_api_url(image.image_url, bucket=settings.MINIO_BUCKET) or image.image_url,
+                    )
+                    for image in vehicle.images
+                ]
+            }
+        )
+        for vehicle in vehicles
+    ]
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut)

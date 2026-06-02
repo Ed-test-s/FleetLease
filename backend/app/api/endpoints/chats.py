@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.chat import Chat, ChatParticipant, Message
@@ -22,11 +23,21 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 active_connections: dict[int, dict[int, WebSocket]] = {}
 
 
+def _media_main_url(value: str | None) -> str | None:
+    return storage_service.to_media_api_url(value, bucket=settings.MINIO_BUCKET)
+
+
+def _message_out(msg: Message) -> MessageOut:
+    out = MessageOut.model_validate(msg)
+    out.file_url = _media_main_url(msg.file_url)
+    return out
+
+
 async def _chat_out_with_partner(
     db: AsyncSession, chat: Chat, current_user_id: int
 ) -> ChatOut:
     co = ChatOut.model_validate(chat)
-    co.last_message = MessageOut.model_validate(chat.messages[-1]) if chat.messages else None
+    co.last_message = _message_out(chat.messages[-1]) if chat.messages else None
     other_ids = [p.user_id for p in chat.participants if p.user_id != current_user_id]
     if not other_ids:
         co.partner = None
@@ -43,7 +54,11 @@ async def _chat_out_with_partner(
         pu = ures.scalar_one_or_none()
         if pu:
             name = user_display_name(pu) or pu.login
-            co.partner = ChatPartnerOut(id=pu.id, display_name=name, avatar_url=pu.avatar_url)
+            co.partner = ChatPartnerOut(
+                id=pu.id,
+                display_name=name,
+                avatar_url=_media_main_url(pu.avatar_url),
+            )
         else:
             co.partner = None
 
@@ -142,7 +157,7 @@ async def get_messages(
         .offset(skip)
         .limit(limit)
     )
-    return result.scalars().all()
+    return [_message_out(msg) for msg in result.scalars().all()]
 
 
 async def _assert_chat_participant(db: AsyncSession, chat_id: int, user_id: int) -> None:
@@ -161,7 +176,7 @@ async def _send_message_and_notify(
     user: User,
     message_text: str,
     file_url: str | None,
-) -> Message:
+) -> MessageOut:
     msg = Message(chat_id=chat_id, sender_id=user.id, message_text=message_text, file_url=file_url)
     db.add(msg)
     await db.flush()
@@ -184,11 +199,11 @@ async def _send_message_and_notify(
         for uid, ws in active_connections[chat_id].items():
             if uid != user.id:
                 try:
-                    await ws.send_json(MessageOut.model_validate(msg).model_dump(mode="json"))
+                    await ws.send_json(_message_out(msg).model_dump(mode="json"))
                 except Exception:
                     pass
 
-    return msg
+    return _message_out(msg)
 
 
 @router.post("/{chat_id}/messages/attachment", response_model=MessageOut, status_code=201)

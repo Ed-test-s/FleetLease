@@ -4,10 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_role
+from app.core.config import settings
 from app.models.favorite import Favorite
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle
 from app.schemas.favorite import FavoriteOut, FavoriteVehicleOut
+from app.services.storage import storage_service
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
@@ -49,7 +51,17 @@ async def list_favorites(
             vehicle_release_year=f.vehicle.release_year,
             vehicle_mileage=f.vehicle.mileage,
             vehicle_fuel_type=f.vehicle.fuel_type,
-            vehicle_images=[{"id": img.id, "image_url": img.image_url} for img in f.vehicle.images],
+            vehicle_images=[
+                {
+                    "id": img.id,
+                    "image_url": storage_service.to_media_api_url(
+                        img.image_url,
+                        bucket=settings.MINIO_BUCKET,
+                    )
+                    or img.image_url,
+                }
+                for img in f.vehicle.images
+            ],
         )
         for f in favorites
     ]

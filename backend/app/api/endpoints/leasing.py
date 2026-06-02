@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_role
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.chat import Chat, ChatParticipant, ChatType
 from app.models.leasing import (
@@ -35,6 +36,7 @@ from app.services.contract_document import (
 from app.services import nbrb_rates as nbrb_rates_svc
 from app.services.banking_requisites import ensure_user_has_bank_requisites
 from app.services.settings_service import get_vat_rate_percent
+from app.services.storage import storage_service
 from app.services.user_display import user_display_name
 from app.schemas.leasing import (
     CalculatorRequest,
@@ -270,6 +272,14 @@ async def _lease_contract_for_request(db: AsyncSession, request_id: int) -> Cont
 
 async def _contract_out(db: AsyncSession, contract: Contract) -> ContractOut:
     co = ContractOut.model_validate(contract)
+    co.psa_doc_url = storage_service.to_media_api_url(
+        contract.psa_doc_url,
+        bucket=settings.MINIO_BUCKET,
+    )
+    co.la_doc_url = storage_service.to_media_api_url(
+        contract.la_doc_url,
+        bucket=settings.MINIO_BUCKET,
+    )
     u_ids: set[int] = {contract.lessor_id}
     if contract.lessee_id:
         u_ids.add(contract.lessee_id)
@@ -1397,8 +1407,14 @@ async def get_contract_documents(
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     return {
-        "psa_doc_url": contract.psa_doc_url,
-        "la_doc_url": contract.la_doc_url,
+        "psa_doc_url": storage_service.to_media_api_url(
+            contract.psa_doc_url,
+            bucket=settings.MINIO_BUCKET,
+        ),
+        "la_doc_url": storage_service.to_media_api_url(
+            contract.la_doc_url,
+            bucket=settings.MINIO_BUCKET,
+        ),
     }
 
 

@@ -1,8 +1,9 @@
 import json
 import re
 import uuid
+from datetime import timedelta
 from io import BytesIO
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import UploadFile
 from minio import Minio
@@ -30,6 +31,9 @@ def _public_read_policy(bucket: str) -> str:
 class StorageService:
     def __init__(self):
         self._client: Minio | None = None
+        self._presign_client: Minio | None = None
+        self._presign_client_endpoint: str | None = None
+        self._presign_client_secure: bool | None = None
         self._policy_set = False
         self._about_bucket_ready = False
 
@@ -67,19 +71,36 @@ class StorageService:
             pass
         self._about_bucket_ready = True
 
+    @staticmethod
+    def _external_presign_target() -> tuple[str, bool]:
+        external = settings.MINIO_EXTERNAL_ENDPOINT.strip().rstrip("/")
+        if external.startswith("http://") or external.startswith("https://"):
+            parsed = urlparse(external)
+            endpoint = parsed.netloc or parsed.path
+            secure = parsed.scheme == "https"
+            return endpoint, secure
+        return external, settings.MINIO_SECURE
+
+    def _client_for_presign(self) -> Minio:
+        endpoint, secure = self._external_presign_target()
+        if (
+            self._presign_client is None
+            or self._presign_client_endpoint != endpoint
+            or self._presign_client_secure != secure
+        ):
+            self._presign_client = Minio(
+                endpoint,
+                access_key=settings.MINIO_ACCESS_KEY,
+                secret_key=settings.MINIO_SECRET_KEY,
+                secure=secure,
+                region="us-east-1",
+            )
+            self._presign_client_endpoint = endpoint
+            self._presign_client_secure = secure
+        return self._presign_client
+
     def _object_key_from_public_url(self, url: str | None) -> str | None:
-        if not url:
-            return None
-        parsed = urlparse(url)
-        path = parsed.path.strip("/")
-        prefix = f"{settings.MINIO_BUCKET}/"
-        if path.startswith(prefix):
-            return path[len(prefix) :]
-        if "/" in path:
-            parts = path.split("/", 1)
-            if parts[0] == settings.MINIO_BUCKET:
-                return parts[1]
-        return None
+        return self.extract_object_key(url, bucket=settings.MINIO_BUCKET)
 
     def remove_object_by_url(self, url: str | None) -> None:
         key = self._object_key_from_public_url(url)
@@ -91,18 +112,7 @@ class StorageService:
             pass
 
     def _object_key_from_about_public_url(self, url: str | None) -> str | None:
-        if not url:
-            return None
-        parsed = urlparse(url)
-        path = parsed.path.strip("/")
-        prefix = f"{settings.MINIO_ABOUT_BUCKET}/"
-        if path.startswith(prefix):
-            return path[len(prefix) :]
-        if "/" in path:
-            parts = path.split("/", 1)
-            if parts[0] == settings.MINIO_ABOUT_BUCKET:
-                return parts[1]
-        return None
+        return self.extract_object_key(url, bucket=settings.MINIO_ABOUT_BUCKET)
 
     def remove_about_object_by_url(self, url: str | None) -> None:
         key = self._object_key_from_about_public_url(url)
@@ -112,6 +122,65 @@ class StorageService:
             self.client.remove_object(settings.MINIO_ABOUT_BUCKET, key)
         except S3Error:
             pass
+
+    @staticmethod
+    def _clean_object_key(object_key: str | None) -> str | None:
+        if not object_key:
+            return None
+        cleaned = object_key.strip().lstrip("/")
+        return cleaned or None
+
+    def extract_object_key(self, value: str | None, *, bucket: str) -> str | None:
+        if not value:
+            return None
+        raw = value.strip()
+        if not raw:
+            return None
+
+        if "://" not in raw:
+            if raw.startswith("/"):
+                path = raw.strip("/")
+            else:
+                path = raw
+                if path.startswith(f"{bucket}/"):
+                    return self._clean_object_key(path[len(bucket) + 1 :])
+                return self._clean_object_key(path)
+        else:
+            parsed = urlparse(raw)
+            path = parsed.path.strip("/")
+
+        prefix = f"{bucket}/"
+        if path.startswith(prefix):
+            return self._clean_object_key(path[len(prefix) :])
+
+        api_prefix = settings.API_V1_PREFIX.strip("/")
+        files_prefix = f"{api_prefix}/files/{bucket}/"
+        if path.startswith(files_prefix):
+            return self._clean_object_key(path[len(files_prefix) :])
+
+        return None
+
+    def to_media_api_url(self, value: str | None, *, bucket: str) -> str | None:
+        if not value:
+            return None
+        key = self.extract_object_key(value, bucket=bucket)
+        if not key:
+            return value
+        encoded_key = quote(key, safe="/")
+        return f"{settings.API_V1_PREFIX}/files/{bucket}/{encoded_key}"
+
+    def get_presigned_get_url(
+        self,
+        *,
+        bucket: str,
+        object_key: str,
+        expires_seconds: int = 600,
+    ) -> str:
+        return self._client_for_presign().presigned_get_object(
+            bucket,
+            object_key,
+            expires=timedelta(seconds=expires_seconds),
+        )
 
     async def upload_file(self, file: UploadFile, folder: str = "uploads") -> str:
         ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "bin"

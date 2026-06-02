@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_role
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password
 from app.models.review import Review
@@ -36,6 +37,10 @@ from app.services.storage import storage_service
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _media_avatar_url(value: str | None) -> str | None:
+    return storage_service.to_media_api_url(value, bucket=settings.MINIO_BUCKET)
+
+
 async def _enrich_user_rating(db: AsyncSession, user_id: int) -> tuple[float | None, int]:
     result = await db.execute(
         select(func.avg(Review.rating), func.count(Review.id)).where(Review.target_id == user_id)
@@ -49,6 +54,7 @@ async def _enrich_user_rating(db: AsyncSession, user_id: int) -> tuple[float | N
 async def get_me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rating, count = await _enrich_user_rating(db, user.id)
     out = UserOut.model_validate(user)
+    out.avatar_url = _media_avatar_url(user.avatar_url)
     out.rating = rating
     out.reviews_count = count
     return out
@@ -67,6 +73,7 @@ async def update_me(
     await db.flush()
     rating, count = await _enrich_user_rating(db, user.id)
     out = UserOut.model_validate(user)
+    out.avatar_url = _media_avatar_url(user.avatar_url)
     out.rating = rating
     out.reviews_count = count
     return out
@@ -99,6 +106,7 @@ async def upload_avatar(
     await db.flush()
     rating, count = await _enrich_user_rating(db, user.id)
     out = UserOut.model_validate(user)
+    out.avatar_url = _media_avatar_url(user.avatar_url)
     out.rating = rating
     out.reviews_count = count
     return out
@@ -123,6 +131,7 @@ async def get_user_public(user_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     rating, count = await _enrich_user_rating(db, user.id)
     out = UserPublicOut.model_validate(user)
+    out.avatar_url = _media_avatar_url(user.avatar_url)
     out.rating = rating
     out.reviews_count = count
     return out
@@ -169,6 +178,7 @@ async def list_users(
     for u in users:
         rating, count = await _enrich_user_rating(db, u.id)
         out = UserPublicOut.model_validate(u)
+        out.avatar_url = _media_avatar_url(u.avatar_url)
         out.rating = rating
         out.reviews_count = count
         out_list.append(out)
@@ -273,7 +283,9 @@ async def toggle_user_active(
         raise HTTPException(status_code=404, detail="User not found")
     user.is_active = not user.is_active
     await db.flush()
-    return UserPublicOut.model_validate(user)
+    out = UserPublicOut.model_validate(user)
+    out.avatar_url = _media_avatar_url(user.avatar_url)
+    return out
 
 
 @router.patch("/{user_id}/role", response_model=UserPublicOut)
@@ -299,4 +311,6 @@ async def change_user_role(
         raise HTTPException(status_code=404, detail="User not found")
     user.role = role
     await db.flush()
-    return UserPublicOut.model_validate(user)
+    out = UserPublicOut.model_validate(user)
+    out.avatar_url = _media_avatar_url(user.avatar_url)
+    return out
