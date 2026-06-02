@@ -115,7 +115,7 @@ async def seed_admin(db: AsyncSession):
 
     admin = User(
         login="admin",
-        password_hash=hash_password("admin"),
+        password_hash=hash_password("admin_pass"),
         role=UserRole.ADMIN,
         user_type=UserType.INDIVIDUAL,
     )
